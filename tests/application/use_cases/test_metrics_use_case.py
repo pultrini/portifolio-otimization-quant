@@ -126,3 +126,17 @@ def test_estrategia_com_operacoes() -> None:
     assert swing.observations >= 2
     # Sobra o lote de 08/01 aberto: a estratégia ainda tem posição.
     assert swing.equity.values[-1] > 0
+
+
+def test_beta_contra_a_taxa_livre_de_risco_nao_e_calculado() -> None:
+    positions, _, use_case = _setup()
+    ImportPositions(positions, MARKET).execute(
+        ImportPositionsRequest(user_id="u", portfolio_id="p", text="CDI R$ 100\nABCD3 1 9")
+    )
+    report = use_case.execute(MetricsRequest(portfolio_id="p"))
+    fixed_income = next(s for s in report.scopes if s.key == "BR_FIXED_INCOME")
+    # Benchmark da classe é o CDI, que também é a taxa livre de risco.
+    assert fixed_income.benchmark == fixed_income.risk_free == "CDI"
+    assert fixed_income.metrics.beta is None
+    equity = next(s for s in report.scopes if s.key == "BR_EQUITY")
+    assert equity.metrics.beta is not None
