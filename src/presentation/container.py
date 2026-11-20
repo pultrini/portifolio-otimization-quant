@@ -11,6 +11,7 @@ from supabase import Client
 from application.use_cases.import_positions import ImportPositions
 from application.use_cases.market_data import RefreshMarketData
 from application.use_cases.metrics import CalculateMetrics
+from application.use_cases.optimization import OptimizePortfolio, SuggestContribution
 from application.use_cases.portfolios import CreatePortfolio, GetAllocationTargets, ListPortfolios
 from application.use_cases.positions import DeletePosition, ListPositions, UpdatePosition
 from application.use_cases.save_allocation_targets import SaveAllocationTargets
@@ -45,6 +46,8 @@ class Container:
     list_trades: ListTrades
     refresh_market_data: RefreshMarketData
     calculate_metrics: CalculateMetrics
+    optimize_portfolio: OptimizePortfolio
+    suggest_contribution: SuggestContribution
 
 
 def assemble(
@@ -73,6 +76,8 @@ def assemble(
         list_trades=ListTrades(trades),
         refresh_market_data=RefreshMarketData(refresher, positions, years),
         calculate_metrics=CalculateMetrics(positions, trades, market_data),
+        optimize_portfolio=OptimizePortfolio(positions, market_data),
+        suggest_contribution=SuggestContribution(portfolios, positions, market_data),
     )
 
 
