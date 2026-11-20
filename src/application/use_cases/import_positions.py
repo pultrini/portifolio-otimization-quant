@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from application.dtos.portfolio import ImportPositionsRequest, ImportPositionsResponse
 from domain.entities.position import Position
 from domain.exceptions import DomainError
-from domain.repositories.market_data_repository import MarketDataRepository
+from domain.repositories.market_data_repository import MarketDataRefresher, MarketDataRepository
 from domain.repositories.position_repository import PositionRepository
 from domain.services.asset_classification import infer_asset_class
 from domain.value_objects.money import Money
@@ -120,9 +120,18 @@ def _parse_line(number: int, line: str) -> ParsedLine:
 class ImportPositions:
     """Cria ou substitui posições a partir do texto colado pelo usuário."""
 
-    def __init__(self, positions: PositionRepository, market_data: MarketDataRepository) -> None:
+    def __init__(
+        self,
+        positions: PositionRepository,
+        market_data: MarketDataRepository,
+        refresher: MarketDataRefresher | None = None,
+        years: int = 5,
+    ) -> None:
         self._positions = positions
         self._market_data = market_data
+        # Opcional: se presente, cotações que faltam são baixadas antes de converter.
+        self._refresher = refresher
+        self._years = years
 
     def execute(self, request: ImportPositionsRequest) -> ImportPositionsResponse:
         """Converte cada linha em posição e grava as válidas.
@@ -140,6 +149,12 @@ class ImportPositions:
         parsed, errors = parse_positions_text(request.text)
         by_value = [item.ticker for item in parsed if item.current_value is not None]
         prices = self._market_data.latest_prices(by_value) if by_value else {}
+        missing = [ticker for ticker in by_value if ticker not in prices]
+        if missing and self._refresher is not None:
+            # Linha por valor precisa de cotação para virar quantidade: busca agora em
+            # vez de pedir ao usuário que rode o pipeline antes.
+            self._refresher.refresh(missing, self._years)
+            prices = self._market_data.latest_prices(by_value)
 
         positions: list[Position] = []
         for item in parsed:

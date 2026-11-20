@@ -1,5 +1,8 @@
 """Configuração da aplicação lida de variáveis de ambiente e do arquivo `.env`."""
 
+from pathlib import Path
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,3 +21,8 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: str = ""
     log_level: str = "INFO"
+
+    # Raiz das camadas bronze/silver/gold (fora do git). Relativa à pasta de execução.
+    data_dir: Path = Path("data")
+    # Horizonte de histórico de preços baixado pelo pipeline.
+    market_history_years: int = Field(default=5, ge=1, le=25)

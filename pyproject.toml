@@ -59,3 +59,9 @@ testpaths = ["tests"]
 # "." permite importar `tests.fakes`; "src" é redundante com a instalação editável,
 # mas mantém os testes rodando mesmo antes de um `uv sync`.
 pythonpath = [".", "src"]
+
+# yfinance não publica tipos; o retorno é tratado como Any e convertido para polars
+# logo na fronteira do client.
+[[tool.mypy.overrides]]
+module = ["yfinance", "yfinance.*"]
+ignore_missing_imports = true
