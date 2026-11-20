@@ -11,7 +11,12 @@ from application.dtos.portfolio import (
 )
 from domain.exceptions import DomainError
 from domain.value_objects.asset_class import AssetClass
-from presentation.components.formatting import format_brl, format_pct, format_quantity
+from presentation.components.formatting import (
+    format_brl,
+    format_number,
+    format_pct,
+    format_quantity,
+)
 from presentation.components.session import PageContext
 
 IMPORT_EXAMPLE = """# TICKER QUANTIDADE PRECO_MEDIO
@@ -136,9 +141,24 @@ def _edit_form(ctx: PageContext, view: PositionsView) -> None:
             st.rerun()
 
 
+def _refresh_button(ctx: PageContext) -> None:
+    """Roda o pipeline medalhão para os ativos da carteira e limpa os caches."""
+    if not st.button("Atualizar dados de mercado", help="Baixa cotações, CDI e câmbio."):
+        return
+    with st.spinner("Baixando cotações e processando Bronze → Silver → Gold..."):
+        report = ctx.container.refresh_market_data.execute(ctx.portfolio_id)
+    # Leituras da Gold em cache ficam obsoletas depois do pipeline.
+    st.cache_data.clear()
+    gold_rows = format_number(report.rows_by_layer.get("gold", 0), decimals=0)
+    st.success(f"Dados atualizados: {gold_rows} linhas na camada Gold.")
+    for ticker, reason in report.failed_tickers.items():
+        st.warning(f"{ticker}: {reason}")
+
+
 def render(ctx: PageContext) -> None:
     st.header("Carteira")
     st.caption(f"Carteira: {ctx.portfolio_name}")
+    _refresh_button(ctx)
     view = ctx.container.list_positions.execute(ctx.portfolio_id)
     _positions_table(view)
     _import_form(ctx)
