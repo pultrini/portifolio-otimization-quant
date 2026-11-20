@@ -12,6 +12,7 @@ from supabase import Client, create_client
 
 from application.dtos.allocation import SaveAllocationTargetsRequest
 from application.use_cases.save_allocation_targets import SaveAllocationTargets
+from domain.exceptions import DomainError
 from domain.value_objects.asset_class import AssetClass
 from infrastructure.config import Settings
 from infrastructure.persistence.supabase_portfolio_repository import SupabasePortfolioRepository
@@ -131,16 +132,23 @@ def _allocation_page(client: Client, user_id: str) -> None:
             )
         submitted = st.form_submit_button("Salvar perfil")
 
-    # Aviso apenas visual. A regra de 100% deve ser imposta no Domain (ver TODO no use case).
+    # Aviso antecipado na tela; quem barra de fato é o AllocationProfile no domínio.
     total = sum(inputs.values())
     if abs(total - 100.0) > ALLOCATION_TOLERANCE_PP:
         st.warning(f"A soma dos alvos é {total:.2f}%. O perfil deve fechar em 100,00%.")
 
     if submitted:
         use_case = SaveAllocationTargets(repo)
-        response = use_case.execute(
-            SaveAllocationTargetsRequest(user_id=user_id, portfolio_id=portfolio_id, targets=inputs)
-        )
+        try:
+            response = use_case.execute(
+                SaveAllocationTargetsRequest(
+                    user_id=user_id, portfolio_id=portfolio_id, targets=inputs
+                )
+            )
+        except DomainError as error:
+            # Regra de negócio violada: a mensagem do domínio já está em português.
+            st.error(str(error))
+            return
         st.success("Perfil salvo.")
         logger.info("Perfil salvo para carteira %s: %s", portfolio_id, response.targets)
 
