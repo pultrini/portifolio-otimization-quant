@@ -9,6 +9,7 @@ import streamlit as st
 from application.dtos.portfolio import RegisterTradeRequest
 from domain.exceptions import DomainError
 from domain.value_objects.strategy_type import StrategyType, TradeSide
+from presentation.components import cache
 from presentation.components.formatting import format_brl, format_quantity
 from presentation.components.session import PageContext
 
@@ -61,6 +62,7 @@ def _register_form(ctx: PageContext) -> None:
     except DomainError as error:
         st.error(str(error))
         return
+    cache.invalidate()
     st.success(f"{_SIDE_LABELS[row.side]} de {row.ticker} registrada.")
 
 

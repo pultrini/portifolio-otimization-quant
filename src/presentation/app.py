@@ -19,7 +19,7 @@ from presentation.components.session import (
     select_portfolio,
 )
 from presentation.container import Container, build_container
-from presentation.pages import allocation, portfolio, trades
+from presentation.pages import allocation, metrics, optimization, portfolio, trades
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +144,8 @@ def main() -> None:
             st.Page(_page(portfolio.render, ctx), title="Carteira", icon="💼", default=True),
             st.Page(_page(trades.render, ctx), title="Operações", icon="🔁"),
             st.Page(_page(allocation.render, ctx), title="Alocação Alvo", icon="🎯"),
+            st.Page(_page(metrics.render, ctx), title="Métricas por Estratégia", icon="📈"),
+            st.Page(_page(optimization.render, ctx), title="Otimização", icon="🧭"),
         ]
     )
     navigation.run()

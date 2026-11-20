@@ -11,6 +11,7 @@ from application.dtos.portfolio import (
 )
 from domain.exceptions import DomainError
 from domain.value_objects.asset_class import AssetClass
+from presentation.components import cache
 from presentation.components.formatting import (
     format_brl,
     format_number,
@@ -55,8 +56,9 @@ def _positions_table(view: PositionsView) -> None:
                 "Ativo": row.ticker,
                 "Classe": row.asset_class.label_pt,
                 "Quantidade": format_quantity(row.quantity),
-                "Preço médio": format_brl(row.average_price)
-                + (" (manual)" if row.manual_override else ""),
+                "Preço médio": format_brl(row.average_price),
+                # Preço médio informado pelo usuário (importação ou edição), não calculado.
+                "Manual": "✓" if row.manual_override else "",
                 "Último preço": format_brl(row.last_price),
                 "Custo": format_brl(row.cost),
                 "Valor de mercado": format_brl(row.market_value),
@@ -91,6 +93,7 @@ def _import_form(ctx: PageContext) -> None:
                 )
             )
             if response.imported:
+                cache.invalidate()
                 st.success("Importados: " + ", ".join(response.imported))
             for error in response.errors:
                 st.error(error)
@@ -135,9 +138,11 @@ def _edit_form(ctx: PageContext, view: PositionsView) -> None:
             except DomainError as error:
                 st.error(str(error))
             else:
+                cache.invalidate()
                 st.rerun()
         if st.button(f"Remover {ticker}", type="secondary"):
             ctx.container.delete_position.execute(ctx.portfolio_id, ticker)
+            cache.invalidate()
             st.rerun()
 
 
@@ -148,7 +153,7 @@ def _refresh_button(ctx: PageContext) -> None:
     with st.spinner("Baixando cotações e processando Bronze → Silver → Gold..."):
         report = ctx.container.refresh_market_data.execute(ctx.portfolio_id)
     # Leituras da Gold em cache ficam obsoletas depois do pipeline.
-    st.cache_data.clear()
+    cache.invalidate()
     gold_rows = format_number(report.rows_by_layer.get("gold", 0), decimals=0)
     st.success(f"Dados atualizados: {gold_rows} linhas na camada Gold.")
     for ticker, reason in report.failed_tickers.items():

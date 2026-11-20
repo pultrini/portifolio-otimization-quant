@@ -43,7 +43,7 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "N", "RUF"]
 # Letras gregas nas fórmulas das docstrings (σ, μ) são intencionais.
-allowed-confusables = ["σ", "μ"]
+allowed-confusables = ["σ", "μ", "ρ", "−", "×"]
 
 [tool.ruff.lint.isort]
 # A pasta `supabase/` (migrations) na raiz faz o ruff achar que `supabase` é módulo local.
@@ -62,8 +62,8 @@ testpaths = ["tests"]
 # mas mantém os testes rodando mesmo antes de um `uv sync`.
 pythonpath = [".", "src"]
 
-# yfinance não publica tipos; o retorno é tratado como Any e convertido para polars
+# yfinance e plotly não publicam tipos; o retorno é tratado como Any e convertido para polars
 # logo na fronteira do client.
 [[tool.mypy.overrides]]
-module = ["yfinance", "yfinance.*"]
+module = ["yfinance", "yfinance.*", "plotly", "plotly.*"]
 ignore_missing_imports = true
