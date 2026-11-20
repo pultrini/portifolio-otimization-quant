@@ -5,6 +5,7 @@ description = "Otimização de portfólio, engenharia de dados medalhão e métr
 # numpy 2.5 exige Python 3.12+, por isso o piso é 3.12 (o CLAUDE.md cita 3.11+).
 requires-python = ">=3.12"
 dependencies = [
+    "httpx>=0.28.1",
     "numpy>=2.5.5",
     "plotly>=7.1.0",
     "polars>=2.1.0",
@@ -22,6 +23,7 @@ dev = [
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.6",
+    "scipy-stubs>=1.18.1.1",
 ]
 
 # O projeto é instalado em modo editável pelo `uv sync`. Assim `domain`, `application`,
