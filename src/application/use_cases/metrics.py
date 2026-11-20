@@ -207,8 +207,11 @@ class CalculateMetrics:
 
         scope.start, scope.end = window[0], window[-1]
         scope.observations = int(returns.size)
+        # Beta contra a própria taxa livre de risco (Renda Fixa Brasil vs. CDI) não tem
+        # significado: a variância do CDI é quase zero e o quociente explode (ex.: 3,2).
+        beta_benchmark = benchmark_returns if scope.benchmark != scope.risk_free else None
         scope.metrics = _risk_metrics(
-            returns, risk_free, benchmark_returns, scope.periods_per_year, include_parametric
+            returns, risk_free, beta_benchmark, scope.periods_per_year, include_parametric
         )
         scope.benchmark_metrics = _risk_metrics(
             benchmark_returns, risk_free, None, scope.periods_per_year, False
