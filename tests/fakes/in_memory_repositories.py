@@ -8,6 +8,7 @@ import numpy as np
 
 from domain.entities.fundamentals import ReitFundamentals, StockFundamentals
 from domain.entities.position import Position
+from domain.entities.savings_goal import GoalDeposit, SavingsGoal
 from domain.entities.trade import Trade
 from domain.exceptions import MissingMarketDataError
 from domain.repositories.market_data_repository import MarketDataRepository
@@ -150,3 +151,46 @@ class NoopFundamentalsRefresher:
     def refresh(self, tickers: Sequence[Ticker]) -> dict[str, str]:
         self.calls.append([t.symbol for t in tickers])
         return {}
+
+
+class InMemorySavingsGoalRepository:
+    """Objetivos e depósitos em memória (mesmas restrições do banco)."""
+
+    def __init__(self) -> None:
+        self.goals: dict[str, SavingsGoal] = {}
+        self.deposits: dict[str, dict[int, GoalDeposit]] = {}
+
+    def list_goals(self) -> list[SavingsGoal]:
+        return list(self.goals.values())
+
+    def create_goal(self, user_id: str, goal: SavingsGoal) -> SavingsGoal:
+        goal_id = f"g{len(self.goals) + 1}"
+        stored = SavingsGoal(
+            goal.name,
+            goal.mode,
+            goal.frequency,
+            goal.unit_amount,
+            goal.step_count,
+            goal.start_date,
+            goal.end_date,
+            goal_id,
+        )
+        self.goals[goal_id] = stored
+        self.deposits[goal_id] = {}
+        return stored
+
+    def delete_goal(self, goal_id: str) -> None:
+        self.goals.pop(goal_id, None)
+        self.deposits.pop(goal_id, None)
+
+    def list_deposits(self, goal_id: str) -> list[GoalDeposit]:
+        return sorted(self.deposits.get(goal_id, {}).values(), key=lambda d: d.deposited_on)
+
+    def add_deposit(self, user_id: str, goal_id: str, deposit: GoalDeposit) -> None:
+        steps = self.deposits[goal_id]
+        if deposit.step in steps:
+            raise RuntimeError("duplicate key value violates unique constraint")
+        steps[deposit.step] = deposit
+
+    def remove_deposit(self, goal_id: str, step: int) -> None:
+        self.deposits.get(goal_id, {}).pop(step, None)

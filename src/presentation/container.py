@@ -15,6 +15,15 @@ from application.use_cases.contribution import (
     SaveChecklist,
     SuggestAssetContribution,
 )
+from application.use_cases.goals import (
+    CreateGoal,
+    DeleteGoal,
+    GetGoalDashboard,
+    ListGoals,
+    PreviewGoal,
+    RegisterDeposit,
+    UndoDeposit,
+)
 from application.use_cases.import_positions import ImportPositions
 from application.use_cases.market_data import RefreshMarketData
 from application.use_cases.metrics import CalculateMetrics
@@ -31,6 +40,7 @@ from domain.repositories.fundamentals_repository import (
 from domain.repositories.market_data_repository import MarketDataRefresher, MarketDataRepository
 from domain.repositories.portfolio_repository import PortfolioRepository
 from domain.repositories.position_repository import PositionRepository
+from domain.repositories.savings_goal_repository import SavingsGoalRepository
 from domain.repositories.trade_repository import TradeRepository
 from infrastructure.config import Settings
 from infrastructure.data_engineering.fundamentals import FundamentalsPipeline
@@ -43,6 +53,9 @@ from infrastructure.persistence.supabase_portfolio_repository import SupabasePor
 from infrastructure.persistence.supabase_position_repository import (
     SupabasePositionRepository,
     SupabaseTradeRepository,
+)
+from infrastructure.persistence.supabase_savings_goal_repository import (
+    SupabaseSavingsGoalRepository,
 )
 
 
@@ -69,6 +82,13 @@ class Container:
     get_checklist: GetChecklist
     save_checklist: SaveChecklist
     refresh_fundamentals: RefreshFundamentals
+    preview_goal: PreviewGoal
+    create_goal: CreateGoal
+    list_goals: ListGoals
+    delete_goal: DeleteGoal
+    goal_dashboard: GetGoalDashboard
+    register_deposit: RegisterDeposit
+    undo_deposit: UndoDeposit
 
 
 def assemble(
@@ -81,6 +101,7 @@ def assemble(
     fundamentals: FundamentalsRepository,
     fundamentals_refresher: FundamentalsRefresher,
     checklist: ChecklistRepository,
+    goals: SavingsGoalRepository,
 ) -> Container:
     """Liga os use cases a quaisquer implementações dos contratos do domínio.
 
@@ -111,6 +132,13 @@ def assemble(
         get_checklist=GetChecklist(fundamentals, checklist, market_data),
         save_checklist=SaveChecklist(checklist),
         refresh_fundamentals=RefreshFundamentals(fundamentals_refresher, positions),
+        preview_goal=PreviewGoal(),
+        create_goal=CreateGoal(goals),
+        list_goals=ListGoals(goals),
+        delete_goal=DeleteGoal(goals),
+        goal_dashboard=GetGoalDashboard(goals),
+        register_deposit=RegisterDeposit(goals),
+        undo_deposit=UndoDeposit(goals),
     )
 
 
@@ -128,4 +156,5 @@ def build_container(client: Client, settings: Settings) -> Container:
             settings.data_dir, YahooFundamentalsClient(), CvmClient()
         ),
         checklist=SupabaseChecklistRepository(client),
+        goals=SupabaseSavingsGoalRepository(client),
     )
