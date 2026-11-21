@@ -180,9 +180,14 @@ def decide_class(
             decision, reason = Decision.NO_PRICE, "Sem cotação; atualize os dados de mercado."
         elif quantities.get(c.ticker, ZERO) > 0:
             decision, reason = Decision.BUY, ""
-        elif deficits.get(c.ticker, ZERO) > 0:
+        elif amounts.get(c.ticker, ZERO) > 0:
+            # Recebeu parte do aporte, mas ela não paga um lote inteiro.
             decision = Decision.TOO_EXPENSIVE
             reason = "A parte do aporte não alcança um lote deste ativo."
+        elif deficits.get(c.ticker, ZERO) > 0:
+            # Abaixo do ideal, mas outros estão ainda mais abaixo: o aporte não chegou aqui.
+            decision = Decision.WAIT
+            reason = "Outros ativos estão mais abaixo do peso ideal."
         else:
             decision, reason = Decision.WAIT, "Já está no peso ideal ou acima."
         checklist_pct = c.checklist_score * 100 if c.checklist_score is not None else None

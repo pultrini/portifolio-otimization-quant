@@ -200,3 +200,19 @@ class TestDecisao:
         assert by["CDI"].amount + by["NTNB-2060"].amount + result.leftover == D("100")
         assert by["NTNB-2060"].quantity == D("0")
         assert by["CDI"].quantity * D("2.5") == by["CDI"].amount
+
+
+def test_abaixo_do_ideal_mas_aporte_nao_chega_aguarda() -> None:
+    # Três ativos de mesma nota (pesos 1/3). Atuais 0, 20 e 100; aporte 15 -> classe 135,
+    # alvos 45 cada. Déficits: A 45, B 25, C 0 (C está acima). Enchimento com 15:
+    # λ = 45 - 15 = 30 > 25, então só A recebe (1 cota de 10; troco 5 não paga B a 6).
+    a = Candidate(Ticker("AAAA3"), EQ, D("0"), D("10"), (1.0, 1.0, 1.0), 1.0)
+    b = Candidate(Ticker("BBBB3"), EQ, D("20"), D("6"), (1.0, 1.0, 1.0), 1.0)
+    c = Candidate(Ticker("CCCC3"), EQ, D("100"), D("5"), (1.0, 1.0, 1.0), 1.0)
+    result = decide_class(EQ, [a, b, c], D("15"))
+    by = {d.ticker.symbol: d for d in result.decisions}
+    assert by["AAAA3"].quantity == D("1")
+    assert by["BBBB3"].decision is Decision.WAIT
+    assert "mais abaixo" in by["BBBB3"].reason
+    assert by["CCCC3"].decision is Decision.WAIT
+    assert "peso ideal ou acima" in by["CCCC3"].reason

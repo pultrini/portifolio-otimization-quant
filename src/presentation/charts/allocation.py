@@ -60,7 +60,8 @@ def allocation_delta_bars(plan: ContributionPlan) -> go.Figure:
             x=[r.asset_class.label_pt for r in rows],
             y=deltas,
             marker={"color": [BLUE if d >= 0 else RED for d in deltas], "cornerradius": 4},
-            text=[f"{d:+.2f} p.p.".replace(".", ",") for d in deltas],
+            # Só o número troca ponto por vírgula; o "p.p." fica como está.
+            text=[f"{d:+.2f}".replace(".", ",") + " p.p." for d in deltas],
             textposition="outside",
             hovertemplate="%{x}<br>%{y:+.2f} p.p.<extra></extra>",
         )
