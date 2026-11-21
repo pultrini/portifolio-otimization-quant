@@ -63,6 +63,8 @@ def test_pagina_carteira() -> None:
     assert at.metric[0].value.startswith("R$ ")
     assert len(at.dataframe) == 1
     assert not at.warning  # todos os ativos têm cotação
+    assert any(s.value == "Lista de desejos" for s in at.subheader)
+    assert any(m.value == "**DDDD3**" for m in at.markdown)
 
 
 def test_pagina_operacoes() -> None:
@@ -77,6 +79,29 @@ def test_pagina_alocacao() -> None:
     assert [m.label for m in at.metric] == ["Patrimônio atual", "Após o aporte"]
     assert len(at.get("plotly_chart")) == 2
     assert not at.warning  # perfil salvo fecha em 100%
+    # Sem valor de aporte ainda: decisão aparece, mas sem compras.
+    assert any(s.value == "Decisão por ativo" for s in at.subheader)
+    assert any("Informe um valor de aporte" in i.value for i in at.info)
+
+
+def test_aportar_registra_e_confirma() -> None:
+    at = _run(_alocacao)
+    amount = next(n for n in at.number_input if n.label == "Valor do aporte (R$)")
+    amount.set_value(1000.0).run()
+    assert not at.exception, [e.value for e in at.exception]
+    texts = [m.value for m in at.markdown]
+    assert "**Melhor aporte**" in texts
+    assert any("Comprar **" in t for t in texts)
+    # Lista de desejos (DDDD3) concorre na renda variável.
+    tables = [d.value for d in at.dataframe]
+    assert any("DDDD3 (desejado)" in str(t) for t in tables)
+    # Checklist editável para ações e FIIs.
+    assert any(e.label.startswith("Checklist AAAA3") for e in at.expander)
+
+    aportar = next(b for b in at.button if b.label == "Aportar")
+    aportar.click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Aporte registrado" in s.value for s in at.success)
 
 
 def test_pagina_metricas() -> None:

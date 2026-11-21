@@ -46,6 +46,8 @@ class PositionsView(BaseModel):
     total_market_value: Decimal | None
     market_value_by_class: dict[AssetClass, Decimal]
     missing_prices: list[str]
+    # Ativos com 0 cotas: desejados, ainda não comprados. Concorrem nas sugestões de aporte.
+    watchlist: list[str] = []
 
 
 class UpdatePositionRequest(BaseModel):
@@ -59,7 +61,7 @@ class UpdatePositionRequest(BaseModel):
 class ImportPositionsRequest(BaseModel):
     """Texto colado pelo usuário, uma posição por linha.
 
-    Formatos aceitos (vírgula ou ponto decimal):
+    Formatos aceitos (vírgula ou ponto decimal; quantidade 0 = lista de desejos):
         `TICKER QUANTIDADE PRECO_MEDIO`          ex.: `EGIE3 2 29,30`
         `TICKER R$ VALOR_ATUAL [VALOR_INVESTIDO]` ex.: `BTC R$ 158,00 175,20`
     """

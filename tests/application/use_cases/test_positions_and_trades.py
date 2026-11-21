@@ -52,12 +52,14 @@ class TestParser:
         assert parse_decimal(raw) == D(expected)
 
     def test_linhas_validas_e_erros(self) -> None:
-        parsed, errors = parse_positions_text(SAMPLE + "ABCD3 1 1\nfoo\nZZZZ3 0 10\n")
-        assert [p.ticker.symbol for p in parsed] == ["ABCD3", "WXYZ11", "CDI", "BTC"]
+        parsed, errors = parse_positions_text(SAMPLE + "ABCD3 1 1\nfoo\nZZZZ3 0 0\n")
+        assert [p.ticker.symbol for p in parsed] == ["ABCD3", "WXYZ11", "CDI", "BTC", "ZZZZ3"]
         assert parsed[3].current_value == D("150.00")
         assert parsed[3].invested_value == D("200.00")
-        # Ticker repetido, linha mal formada e quantidade zero.
-        assert len(errors) == 3
+        # Ticker repetido e linha mal formada; quantidade zero é lista de desejos.
+        assert len(errors) == 2
+        assert parsed[-1].ticker.symbol == "ZZZZ3"
+        assert parsed[-1].quantity == 0
 
     def test_numero_negativo_invalido(self) -> None:
         with pytest.raises(DomainError):
@@ -205,3 +207,18 @@ class TestUpdateAndDelete:
             UpdatePosition(InMemoryPositionRepository()).execute(
                 UpdatePositionRequest(user_id="u", portfolio_id="p", ticker="NOPE3")
             )
+
+
+def test_lista_de_desejos() -> None:
+    positions = InMemoryPositionRepository()
+    response = ImportPositions(positions, _market()).execute(
+        ImportPositionsRequest(user_id="u", portfolio_id="p", text="ABCD3 1 20\nVALE3 0 0")
+    )
+    assert response.errors == []
+    view = ListPositions(positions, _market()).execute("p")
+    assert [r.ticker for r in view.rows] == ["ABCD3"]
+    assert view.watchlist == ["VALE3"]
+    wish = positions.get_position("p", Ticker("VALE3"))
+    assert wish is not None
+    assert wish.average_price.amount == 0
+    assert not wish.manual_override

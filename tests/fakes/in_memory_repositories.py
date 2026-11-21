@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import numpy as np
 
+from domain.entities.fundamentals import ReitFundamentals, StockFundamentals
 from domain.entities.position import Position
 from domain.entities.trade import Trade
 from domain.exceptions import MissingMarketDataError
@@ -104,3 +105,48 @@ class FakeMarketDataRepository(MarketDataRepository):
         return PriceHistory(
             tuple(self._dates[i] for i in keep), tuple(t.symbol for t in tickers), matrix
         )
+
+
+class InMemoryChecklistRepository:
+    """Respostas manuais em memória (mesma semântica do Supabase: None apaga)."""
+
+    def __init__(self) -> None:
+        self.saved: dict[Ticker, dict[str, bool]] = {}
+
+    def answers(self, tickers: Sequence[Ticker]) -> dict[Ticker, dict[str, bool | None]]:
+        return {t: dict(self.saved[t]) for t in tickers if t in self.saved}
+
+    def save_answers(self, user_id: str, ticker: Ticker, answers: dict[str, bool | None]) -> None:
+        current = self.saved.setdefault(ticker, {})
+        for key, value in answers.items():
+            if value is None:
+                current.pop(key, None)
+            else:
+                current[key] = value
+
+
+class FakeFundamentalsRepository:
+    """Fundamentos fixos em memória."""
+
+    def __init__(
+        self,
+        stocks: dict[str, StockFundamentals] | None = None,
+        reits: dict[str, ReitFundamentals] | None = None,
+    ) -> None:
+        self._stocks = stocks or {}
+        self._reits = reits or {}
+
+    def stock_fundamentals(self, tickers: Sequence[Ticker]) -> dict[Ticker, StockFundamentals]:
+        return {t: self._stocks[t.symbol] for t in tickers if t.symbol in self._stocks}
+
+    def reit_fundamentals(self, tickers: Sequence[Ticker]) -> dict[Ticker, ReitFundamentals]:
+        return {t: self._reits[t.symbol] for t in tickers if t.symbol in self._reits}
+
+
+class NoopFundamentalsRefresher:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def refresh(self, tickers: Sequence[Ticker]) -> dict[str, str]:
+        self.calls.append([t.symbol for t in tickers])
+        return {}

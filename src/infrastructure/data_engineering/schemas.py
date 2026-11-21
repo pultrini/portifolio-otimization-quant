@@ -116,3 +116,87 @@ def validate(frame: pl.DataFrame, schema: pl.Schema, name: str) -> pl.DataFrame:
         order = "" if diffs else f" (ordem: {list(actual)})"
         raise SchemaMismatchError(f"{name}: schema inválido{order}. " + "; ".join(diffs))
     return frame
+
+
+# ================================================== Fundamentos (checklist de aporte)
+# Bronze: demonstrações do Yahoo em formato longo (uma linha por item e período).
+STATEMENTS_BRONZE = pl.Schema(
+    {
+        "symbol": pl.String,
+        "statement": pl.String,  # "income" ou "balance"
+        "item": pl.String,
+        "period_end": pl.Date,
+        "value": pl.Float64,
+    }
+)
+PROFILE_BRONZE = pl.Schema({"symbol": pl.String, "market_cap": pl.Float64, "currency": pl.String})
+DIVIDENDS_BRONZE = pl.Schema({"symbol": pl.String, "date": pl.Date, "amount": pl.Float64})
+# CSVs da CVM: todas as colunas como texto, exatamente como publicadas.
+CVM_REGISTRY_BRONZE = pl.Schema(
+    {
+        "CNPJ_CIA": pl.String,
+        "DENOM_SOCIAL": pl.String,
+        "DT_CONST": pl.String,
+        "SIT": pl.String,
+        "SETOR_ATIV": pl.String,
+        "CONTROLE_ACIONARIO": pl.String,
+    }
+)
+CVM_SECURITIES_BRONZE = pl.Schema(
+    {"CNPJ_Companhia": pl.String, "Codigo_Negociacao": pl.String, "Data_Referencia": pl.String}
+)
+CVM_REIT_GENERAL_BRONZE = pl.Schema(
+    {
+        "CNPJ_Fundo_Classe": pl.String,
+        "Data_Referencia": pl.String,
+        "Codigo_ISIN": pl.String,
+        "Segmento_Atuacao": pl.String,
+        "Mercado_Negociacao_Bolsa": pl.String,
+    }
+)
+CVM_REIT_COMPLEMENT_BRONZE = pl.Schema(
+    {
+        "CNPJ_Fundo_Classe": pl.String,
+        "Data_Referencia": pl.String,
+        "Valor_Patrimonial_Cotas": pl.String,
+        "Percentual_Dividend_Yield_Mes": pl.String,
+    }
+)
+
+# Gold: fatos prontos para as regras do checklist.
+GOLD_STOCK_ANNUAL = pl.Schema(
+    {
+        "ticker": pl.String,
+        "year": pl.Int32,
+        "revenue": pl.Float64,
+        "net_income": pl.Float64,
+        "ebitda": pl.Float64,
+        "equity": pl.Float64,
+        "total_debt": pl.Float64,
+        "cash": pl.Float64,
+    }
+)
+GOLD_STOCK_PROFILE = pl.Schema(
+    {
+        "ticker": pl.String(),
+        "cnpj": pl.String(),
+        "constitution_date": pl.Date(),
+        "control": pl.String(),
+        "sector": pl.String(),
+        "market_cap_brl": pl.Float64(),
+        "dividend_years": pl.List(pl.Int32()),
+    }
+)
+GOLD_REIT_PROFILE = pl.Schema(
+    {
+        "ticker": pl.String,
+        "cnpj": pl.String,
+        "segment": pl.String,
+        "reference_month": pl.Date,
+        "book_value_per_share": pl.Float64,
+        "months_with_dividends": pl.Int32,
+        "months_observed": pl.Int32,
+        "dividend_yield_12m": pl.Float64,
+        "segment_median_yield_12m": pl.Float64,
+    }
+)

@@ -6,11 +6,13 @@ from decimal import Decimal
 import streamlit as st
 
 from application.dtos.allocation import SaveAllocationTargetsRequest
-from application.dtos.optimization import ContributionPlan, ContributionRequest
+from application.dtos.contribution import AssetContributionRequest
+from application.dtos.optimization import ContributionPlan
 from domain.exceptions import DomainError
 from domain.value_objects.asset_class import AssetClass
 from presentation.charts.allocation import allocation_delta_bars, allocation_donuts
 from presentation.components import cache
+from presentation.components.contribution_panel import render_decision
 from presentation.components.formatting import format_brl, format_pct
 from presentation.components.session import PageContext
 
@@ -74,30 +76,49 @@ def _plan_table(plan: ContributionPlan) -> None:
             for row in plan.rows
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
 
 def _contribution_section(ctx: PageContext) -> None:
     st.subheader("Atual vs. alvo e sugestão de aporte")
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     amount = col1.number_input("Valor do aporte (R$)", min_value=0.0, step=100.0, format="%.2f")
     allow_sales = col2.toggle(
         "Permitir vendas",
         value=False,
         help="Sem vendas, o aporte vai para as classes mais abaixo do alvo.",
     )
+    quant_weight = col3.slider(
+        "Peso do critério quant",
+        min_value=0,
+        max_value=100,
+        value=50,
+        step=10,
+        format="%d%%",
+        help="O restante do peso vai para o checklist de perguntas.",
+    )
+    if st.button("Atualizar fundamentos (dados abertos)", help="Yahoo Finance e CVM."):
+        with st.spinner("Baixando balanços, cadastro da CVM e informes de FIIs..."):
+            failures = ctx.container.refresh_fundamentals.execute(ctx.portfolio_id)
+        cache.invalidate()
+        st.success("Fundamentos atualizados.")
+        for name, reason in failures.items():
+            st.warning(f"{name}: {reason}")
+
     try:
-        plan = ctx.container.suggest_contribution.execute(
-            ContributionRequest(
+        result = ctx.container.suggest_asset_contribution.execute(
+            AssetContributionRequest(
                 portfolio_id=ctx.portfolio_id,
                 amount=Decimal(str(amount)),
                 allow_sales=allow_sales,
+                quant_weight=quant_weight / 100,
             )
         )
     except DomainError as error:
         st.info(str(error))
         return
+    plan = result.plan
     if plan.missing_prices:
         st.warning(
             "Sem cotação para: "
@@ -111,9 +132,10 @@ def _contribution_section(ctx: PageContext) -> None:
     cols = st.columns(2)
     cols[0].metric("Patrimônio atual", format_brl(plan.total_before))
     cols[1].metric("Após o aporte", format_brl(plan.total_after))
-    st.plotly_chart(allocation_donuts(plan), use_container_width=True)
-    st.plotly_chart(allocation_delta_bars(plan), use_container_width=True)
+    st.plotly_chart(allocation_donuts(plan), width="stretch")
+    st.plotly_chart(allocation_delta_bars(plan), width="stretch")
     _plan_table(plan)
+    render_decision(ctx, result)
 
 
 def render(ctx: PageContext) -> None:

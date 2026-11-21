@@ -37,7 +37,7 @@ def _weights_table(result: OptimizationResult) -> None:
         for point in portfolios:
             line[point.label] = fmt(point)
         rows.append(line)
-    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.dataframe(rows, hide_index=True, width="stretch")
 
 
 def render(ctx: PageContext) -> None:
@@ -88,7 +88,7 @@ def render(ctx: PageContext) -> None:
         None,
     )
 
-    st.plotly_chart(frontier_scatter(result), use_container_width=True)
+    st.plotly_chart(frontier_scatter(result), width="stretch")
     st.markdown("**Pesos sugeridos**")
     _weights_table(result)
     st.caption(
@@ -97,4 +97,4 @@ def render(ctx: PageContext) -> None:
     )
 
     st.markdown("### Correlação entre os ativos")
-    st.plotly_chart(correlation_heatmap(result), use_container_width=True)
+    st.plotly_chart(correlation_heatmap(result), width="stretch")
