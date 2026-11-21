@@ -48,6 +48,12 @@ def _otimizacao() -> None:
     optimization.render(build_context())
 
 
+def _guia() -> None:
+    from presentation.pages import guide
+
+    guide.render()
+
+
 def _run(script: object) -> AppTest:
     at = AppTest.from_function(script, default_timeout=TIMEOUT)  # type: ignore[arg-type]
     at.run()
@@ -156,3 +162,24 @@ def test_app_sem_sessao_mostra_login(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not at.exception
     assert at.title[0].value == "Otimização de Portfólio"
     assert [t.label for t in at.tabs] == ["Entrar", "Criar conta"]
+
+
+def test_pagina_guia_renderiza_todas_as_metricas() -> None:
+    from presentation.components.glossary import DOCS
+
+    at = AppTest.from_function(_guia, default_timeout=TIMEOUT)  # type: ignore[arg-type]
+    at.query_params["m"] = "sharpe"
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert [e.label for e in at.expander] == [d.title for d in DOCS]
+    assert len(at.latex) == len(DOCS)
+    # Exemplos numéricos calculados pelo domínio aparecem no texto.
+    assert any("**-0,75**" in m.value for m in at.markdown)
+
+
+def test_app_inclui_guia_na_navegacao(app: AppTest) -> None:
+    app.run()
+    assert not app.exception, [e.value for e in app.exception]
+    # O popover "Equações e exemplos" só aparece nas páginas com métricas; a Carteira
+    # abre por padrão e o guia está registrado na navegação.
+    assert app.header[0].value == "Carteira"
