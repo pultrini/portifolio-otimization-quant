@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 import streamlit as st
+from streamlit.navigation.page import StreamlitPage
 
 from application.dtos.portfolio import CreatePortfolioRequest
 from presentation.container import Container
@@ -22,6 +23,8 @@ class PageContext:
     user_id: str
     portfolio_id: str
     portfolio_name: str
+    # Página do Guia de Métricas, para os links "Equações e exemplos" (None em testes).
+    guide_page: StreamlitPage | None = None
 
 
 def select_portfolio(container: Container, user_id: str) -> tuple[str, str] | None:

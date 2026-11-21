@@ -90,5 +90,5 @@ def render(ctx: PageContext) -> None:
             for row in rows
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )

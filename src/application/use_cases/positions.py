@@ -31,7 +31,9 @@ class ListPositions:
             resultado = valor de mercado - custo; resultado % = resultado / custo
             peso = valor de mercado / soma dos valores de mercado
         """
-        positions = [p for p in self._positions.list_positions(portfolio_id) if not p.is_closed]
+        all_positions = self._positions.list_positions(portfolio_id)
+        positions = [p for p in all_positions if not p.is_closed]
+        watchlist = sorted(p.ticker.symbol for p in all_positions if p.is_closed)
         prices = self._market_data.latest_prices([p.ticker for p in positions])
 
         rows: list[PositionRow] = []
@@ -76,6 +78,7 @@ class ListPositions:
             total_market_value=total_market,
             market_value_by_class=by_class,
             missing_prices=missing,
+            watchlist=watchlist,
         )
 
 

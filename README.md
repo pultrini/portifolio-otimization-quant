@@ -28,7 +28,9 @@ cp .env.example .env   # preencha SUPABASE_URL e SUPABASE_ANON_KEY
 | Tipagem | `uv run mypy src` |
 
 O pipeline também roda pela interface (botão **Atualizar dados de mercado** na página
-Carteira) e é disparado sozinho quando uma importação precisa de cotação.
+Carteira) e é disparado sozinho quando uma importação precisa de cotação. Os fundamentos
+do checklist (balanços no Yahoo, cadastro e informes de FII na CVM) são atualizados pelo
+botão **Atualizar fundamentos** na Alocação Alvo.
 
 ## Importando a carteira
 
@@ -43,6 +45,8 @@ MXRF11 35 9,28
 CDI R$ 652,46
 NTNB-2060 R$ 182,86
 BTC R$ 158,00 175,20
+# TICKER 0 0   (lista de desejos: ativo que quer ter)
+VALE3 0 0
 ```
 
 Tickers suportados:
@@ -66,6 +70,14 @@ Linhas por valor viram quantidade com a última cotação: `quantidade = valor /
   curva de patrimônio e drawdown; win rate, payoff e profit factor por estratégia.
 - **Otimização**: fronteira eficiente (Markowitz), máximo Sharpe, mínima variância,
   Risk Parity e correlação.
+- **Decisão de aporte** (na Alocação Alvo): por ativo, combinando nota quant (Sharpe,
+  Sortino, Calmar) e checklist de perguntas (11 para ações, 6 para FIIs). Respostas
+  automáticas por dados abertos (Yahoo Finance e CVM), editáveis; botão **Aportar**
+  registra as compras. Ativos com 0 cotas formam a lista de desejos.
+- **Objetivos**: metas de poupança com foco em constância (desafio 1, 2, 3... ou valor
+  fixo), com sequência, constância e calendário de depósitos.
+- **Guia de Métricas**: fórmula, explicação, exemplo numérico e uso na decisão de cada
+  métrica; o "?" de cada KPI leva até ele.
 
 ## Arquitetura
 

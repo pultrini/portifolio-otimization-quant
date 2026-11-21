@@ -24,7 +24,9 @@ IMPORT_EXAMPLE = """# TICKER QUANTIDADE PRECO_MEDIO
 EGIE3 2 29,30
 # TICKER R$ VALOR_ATUAL [VALOR_INVESTIDO]  (renda fixa, cripto)
 CDI R$ 652,46
-BTC R$ 158,00 175,20"""
+BTC R$ 158,00 175,20
+# Lista de desejos (ativos que quer ter): quantidade e preço médio zerados
+VALE3 0 0"""
 
 
 def _positions_table(view: PositionsView) -> None:
@@ -69,7 +71,7 @@ def _positions_table(view: PositionsView) -> None:
             for row in view.rows
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -160,11 +162,44 @@ def _refresh_button(ctx: PageContext) -> None:
         st.warning(f"{ticker}: {reason}")
 
 
+def _watchlist(ctx: PageContext, view: PositionsView) -> None:
+    """Ativos desejados (0 cotas): concorrem nas sugestões de aporte da Alocação Alvo."""
+    st.subheader("Lista de desejos")
+    st.caption("Ativos que você quer ter. Entram na decisão de aporte junto com a carteira.")
+    if view.watchlist:
+        cols = st.columns(min(len(view.watchlist), 6))
+        for index, ticker in enumerate(view.watchlist):
+            column = cols[index % len(cols)]
+            column.markdown(f"**{ticker}**")
+            if column.button("Remover", key=f"unwish_{ticker}"):
+                ctx.container.delete_position.execute(ctx.portfolio_id, ticker)
+                cache.invalidate()
+                st.rerun()
+    with st.form("add_wish", clear_on_submit=True):
+        col1, col2 = st.columns([3, 1])
+        ticker = col1.text_input("Adicionar ativo desejado", placeholder="VALE3")
+        col2.write("")
+        added = col2.form_submit_button("Adicionar", width="stretch")
+    if added and ticker.strip():
+        # Mesmo caminho da importação: "TICKER 0 0" cria a posição desejada.
+        response = ctx.container.import_positions.execute(
+            ImportPositionsRequest(
+                user_id=ctx.user_id, portfolio_id=ctx.portfolio_id, text=f"{ticker.strip()} 0 0"
+            )
+        )
+        for error in response.errors:
+            st.error(error)
+        if response.imported:
+            cache.invalidate()
+            st.rerun()
+
+
 def render(ctx: PageContext) -> None:
     st.header("Carteira")
     st.caption(f"Carteira: {ctx.portfolio_name}")
     _refresh_button(ctx)
     view = ctx.container.list_positions.execute(ctx.portfolio_id)
     _positions_table(view)
+    _watchlist(ctx, view)
     _import_form(ctx)
     _edit_form(ctx, view)

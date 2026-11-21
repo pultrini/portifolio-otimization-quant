@@ -18,9 +18,13 @@ from presentation.components.session import PageContext
 from presentation.container import Container, assemble
 from tests.fakes.in_memory_portfolio_repository import InMemoryPortfolioRepository
 from tests.fakes.in_memory_repositories import (
+    FakeFundamentalsRepository,
     FakeMarketDataRepository,
+    InMemoryChecklistRepository,
     InMemoryPositionRepository,
+    InMemorySavingsGoalRepository,
     InMemoryTradeRepository,
+    NoopFundamentalsRefresher,
 )
 
 BRT = timezone(timedelta(hours=-3))
@@ -46,6 +50,7 @@ def _market() -> FakeMarketDataRepository:
         history={
             "AAAA3": walk(25.0, 0.0004, 0.015),
             "BBBB4": walk(40.0, 0.0002, 0.02),
+            "DDDD3": walk(15.0, 0.0006, 0.018),
             "CCCC11": walk(100.0, 0.0001, 0.006),
             "BTC": walk(350000.0, 0.001, 0.03),
             "^BVSP": walk(130000.0, 0.0003, 0.011),
@@ -61,14 +66,25 @@ def build_container() -> tuple[Container, str]:
     trades = InMemoryTradeRepository(positions)
     market = _market()
     bbbb4 = market._history["BBBB4"]
-    container = assemble(portfolios, positions, trades, market, NoopRefresher(), years=5)
+    container = assemble(
+        portfolios,
+        positions,
+        trades,
+        market,
+        NoopRefresher(),
+        years=5,
+        fundamentals=FakeFundamentalsRepository(),
+        fundamentals_refresher=NoopFundamentalsRefresher(),
+        checklist=InMemoryChecklistRepository(),
+        goals=InMemorySavingsGoalRepository(),
+    )
 
     portfolio = portfolios.create_portfolio("user-1", "Principal")
     container.import_positions.execute(
         ImportPositionsRequest(
             user_id="user-1",
             portfolio_id=portfolio.id,
-            text="AAAA3 10 24,00\nBBBB4 5 38\nCCCC11 3 95\nCDI R$ 600\nBTC R$ 150 170",
+            text="AAAA3 10 24,00\nBBBB4 5 38\nCCCC11 3 95\nCDI R$ 600\nBTC R$ 150 170\nDDDD3 0 0",
         )
     )
     portfolios.save_allocation_targets(

@@ -13,7 +13,9 @@ from presentation.components.formatting import (
     format_number,
     format_ratio_as_pct,
 )
+from presentation.components.glossary import help_text
 from presentation.components.session import PageContext
+from presentation.pages import guide
 
 
 def _weights_table(result: OptimizationResult) -> None:
@@ -37,12 +39,13 @@ def _weights_table(result: OptimizationResult) -> None:
         for point in portfolios:
             line[point.label] = fmt(point)
         rows.append(line)
-    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.dataframe(rows, hide_index=True, width="stretch")
 
 
 def render(ctx: PageContext) -> None:
     st.header("Otimização")
     st.caption(f"Carteira: {ctx.portfolio_name}")
+    guide.links(ctx.guide_page, ["frontier", "sharpe", "risk_parity", "correlation", "volatility"])
     col1, col2 = st.columns(2)
     lookback = col1.select_slider("Janela de estimação (anos)", options=[1, 2, 3, 5], value=3)
     include_fixed = col2.toggle(
@@ -74,6 +77,7 @@ def render(ctx: PageContext) -> None:
     cols[0].metric(
         "Sharpe atual",
         PLACEHOLDER if current.sharpe is None else format_number(current.sharpe),
+        help="Sharpe da carteira atual (só os ativos otimizados). " + help_text("sharpe"),
     )
     cols[1].metric(
         "Sharpe máximo",
@@ -81,20 +85,26 @@ def render(ctx: PageContext) -> None:
         None
         if best.sharpe is None or current.sharpe is None
         else format_number(best.sharpe - current.sharpe),
+        help="Maior Sharpe possível com os mesmos ativos no período (carteira tangente). "
+        + help_text("frontier"),
     )
     cols[2].metric(
         "Volatilidade mínima",
         format_ratio_as_pct(result.min_variance.volatility),
         None,
+        help="Menor volatilidade alcançável combinando os ativos (ponta esquerda da fronteira).",
     )
 
-    st.plotly_chart(frontier_scatter(result), use_container_width=True)
-    st.markdown("**Pesos sugeridos**")
+    st.plotly_chart(frontier_scatter(result), width="stretch")
+    st.markdown(
+        "**Pesos sugeridos**",
+        help="Fração do valor em cada ativo para cada carteira ótima. " + help_text("risk_parity"),
+    )
     _weights_table(result)
     st.caption(
         "Retornos esperados são médias históricas da janela: mostram o que teria sido "
         "ótimo no período, não uma previsão."
     )
 
-    st.markdown("### Correlação entre os ativos")
-    st.plotly_chart(correlation_heatmap(result), use_container_width=True)
+    st.markdown("### Correlação entre os ativos", help=help_text("correlation"))
+    st.plotly_chart(correlation_heatmap(result), width="stretch")

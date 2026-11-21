@@ -38,7 +38,7 @@ class RebalancePlan:
     total_after: Money
 
 
-def _water_fill(deficits: dict[AssetClass, Decimal], budget: Decimal) -> dict[AssetClass, Decimal]:
+def water_fill[K](deficits: Mapping[K, Decimal], budget: Decimal) -> dict[K, Decimal]:
     """Distribui `budget` reduzindo primeiro os maiores déficits ("encher até o nível").
 
     Encontra λ >= 0 tal que Σ max(0, d_i - λ) = budget e compra d_i - λ em cada classe.
@@ -64,7 +64,7 @@ def _water_fill(deficits: dict[AssetClass, Decimal], budget: Decimal) -> dict[As
     return {c: d - level for d, c in ordered if d > level}
 
 
-def _to_cents(amounts: dict[AssetClass, Decimal], total: Decimal) -> dict[AssetClass, Decimal]:
+def _to_cents[K](amounts: dict[K, Decimal], total: Decimal) -> dict[K, Decimal]:
     """Arredonda para centavos sem perder nem criar dinheiro.
 
     Trunca cada valor e entrega os centavos que sobraram à maior parcela, para que a
@@ -90,7 +90,7 @@ def suggest_contribution(
     Déficit: max(0, alvo - atual).
 
     - Sem vendas (padrão, aportes antes de vendas): o aporte é distribuído por
-      enchimento de nível sobre os déficits (`_water_fill`).
+      enchimento de nível sobre os déficits (`water_fill`).
     - Com vendas: compra todo o déficit e vende todo o excesso; a carteira termina
       exatamente no alvo (compras - vendas = aporte).
 
@@ -112,7 +112,7 @@ def suggest_contribution(
         sales = _to_cents(sales, sum(sales.values(), ZERO))
         buys = _to_cents(buys, budget + sum(sales.values(), ZERO))
     else:
-        buys = _to_cents(_water_fill(deficits, budget), budget)
+        buys = _to_cents(water_fill(deficits, budget), budget)
         sales = {}
 
     return RebalancePlan(

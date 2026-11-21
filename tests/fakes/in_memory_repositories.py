@@ -6,7 +6,9 @@ from decimal import Decimal
 
 import numpy as np
 
+from domain.entities.fundamentals import ReitFundamentals, StockFundamentals
 from domain.entities.position import Position
+from domain.entities.savings_goal import GoalDeposit, SavingsGoal
 from domain.entities.trade import Trade
 from domain.exceptions import MissingMarketDataError
 from domain.repositories.market_data_repository import MarketDataRepository
@@ -104,3 +106,91 @@ class FakeMarketDataRepository(MarketDataRepository):
         return PriceHistory(
             tuple(self._dates[i] for i in keep), tuple(t.symbol for t in tickers), matrix
         )
+
+
+class InMemoryChecklistRepository:
+    """Respostas manuais em memória (mesma semântica do Supabase: None apaga)."""
+
+    def __init__(self) -> None:
+        self.saved: dict[Ticker, dict[str, bool]] = {}
+
+    def answers(self, tickers: Sequence[Ticker]) -> dict[Ticker, dict[str, bool | None]]:
+        return {t: dict(self.saved[t]) for t in tickers if t in self.saved}
+
+    def save_answers(self, user_id: str, ticker: Ticker, answers: dict[str, bool | None]) -> None:
+        current = self.saved.setdefault(ticker, {})
+        for key, value in answers.items():
+            if value is None:
+                current.pop(key, None)
+            else:
+                current[key] = value
+
+
+class FakeFundamentalsRepository:
+    """Fundamentos fixos em memória."""
+
+    def __init__(
+        self,
+        stocks: dict[str, StockFundamentals] | None = None,
+        reits: dict[str, ReitFundamentals] | None = None,
+    ) -> None:
+        self._stocks = stocks or {}
+        self._reits = reits or {}
+
+    def stock_fundamentals(self, tickers: Sequence[Ticker]) -> dict[Ticker, StockFundamentals]:
+        return {t: self._stocks[t.symbol] for t in tickers if t.symbol in self._stocks}
+
+    def reit_fundamentals(self, tickers: Sequence[Ticker]) -> dict[Ticker, ReitFundamentals]:
+        return {t: self._reits[t.symbol] for t in tickers if t.symbol in self._reits}
+
+
+class NoopFundamentalsRefresher:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def refresh(self, tickers: Sequence[Ticker]) -> dict[str, str]:
+        self.calls.append([t.symbol for t in tickers])
+        return {}
+
+
+class InMemorySavingsGoalRepository:
+    """Objetivos e depósitos em memória (mesmas restrições do banco)."""
+
+    def __init__(self) -> None:
+        self.goals: dict[str, SavingsGoal] = {}
+        self.deposits: dict[str, dict[int, GoalDeposit]] = {}
+
+    def list_goals(self) -> list[SavingsGoal]:
+        return list(self.goals.values())
+
+    def create_goal(self, user_id: str, goal: SavingsGoal) -> SavingsGoal:
+        goal_id = f"g{len(self.goals) + 1}"
+        stored = SavingsGoal(
+            goal.name,
+            goal.mode,
+            goal.frequency,
+            goal.unit_amount,
+            goal.step_count,
+            goal.start_date,
+            goal.end_date,
+            goal_id,
+        )
+        self.goals[goal_id] = stored
+        self.deposits[goal_id] = {}
+        return stored
+
+    def delete_goal(self, goal_id: str) -> None:
+        self.goals.pop(goal_id, None)
+        self.deposits.pop(goal_id, None)
+
+    def list_deposits(self, goal_id: str) -> list[GoalDeposit]:
+        return sorted(self.deposits.get(goal_id, {}).values(), key=lambda d: d.deposited_on)
+
+    def add_deposit(self, user_id: str, goal_id: str, deposit: GoalDeposit) -> None:
+        steps = self.deposits[goal_id]
+        if deposit.step in steps:
+            raise RuntimeError("duplicate key value violates unique constraint")
+        steps[deposit.step] = deposit
+
+    def remove_deposit(self, goal_id: str, step: int) -> None:
+        self.deposits.get(goal_id, {}).pop(step, None)

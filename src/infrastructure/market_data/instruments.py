@@ -25,6 +25,14 @@ class Source(StrEnum):
     YAHOO = "yahoo"
     BCB = "bcb_sgs"
     TESOURO = "tesouro_direto"
+    # Fundamentos (checklist de aporte).
+    YAHOO_STATEMENTS = "yahoo_statements"
+    YAHOO_PROFILE = "yahoo_profile"
+    YAHOO_DIVIDENDS = "yahoo_dividends"
+    CVM_REGISTRY = "cvm_registry"
+    CVM_SECURITIES = "cvm_securities"
+    CVM_REIT_GENERAL = "cvm_reit_general"
+    CVM_REIT_COMPLEMENT = "cvm_reit_complement"
 
 
 class PriceCurrency(StrEnum):
