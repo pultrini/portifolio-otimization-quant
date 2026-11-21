@@ -106,9 +106,9 @@ def _parse_line(number: int, line: str) -> ParsedLine:
     tokens = line.split()
     if len(tokens) != 3:
         raise DomainError("use 'TICKER QUANTIDADE PRECO_MEDIO' ou 'TICKER R$ VALOR'.")
+    # Quantidade 0 é permitida: o ativo entra na lista de desejos (CLAUDE.md 5.1,
+    # "ativos que deseja ter") e passa a concorrer nas sugestões de aporte.
     quantity = parse_decimal(tokens[1])
-    if quantity == 0:
-        raise DomainError("quantidade precisa ser maior que zero.")
     return ParsedLine(
         number,
         Ticker.parse(tokens[0]),
@@ -177,6 +177,9 @@ class ImportPositions:
     def _to_position(item: ParsedLine, prices: dict[Ticker, Money]) -> Position:
         asset_class = infer_asset_class(item.ticker)
         if item.quantity is not None and item.average_price is not None:
+            if item.quantity == 0:
+                # Lista de desejos: sem cotas, o preço médio não significa nada.
+                return Position(item.ticker, asset_class, item.quantity, Money.zero())
             return Position(
                 item.ticker, asset_class, item.quantity, Money.brl(item.average_price), True
             )

@@ -98,7 +98,7 @@ def _metrics_table(metrics: RiskReturnMetrics, bench: RiskReturnMetrics, paramet
             for label, field, kind in rows
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -143,7 +143,7 @@ def _scope_section(scope: ScopeReport, parametric: bool) -> None:
     )
     st.caption(period)
     _kpis(scope)
-    st.plotly_chart(equity_and_underwater(scope), use_container_width=True)
+    st.plotly_chart(equity_and_underwater(scope), width="stretch")
     _trade_stats(scope)
     with st.expander("Todas as métricas"):
         _metrics_table(scope.metrics, scope.benchmark_metrics, parametric)
