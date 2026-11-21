@@ -48,6 +48,18 @@ def _otimizacao() -> None:
     optimization.render(build_context())
 
 
+def _objetivos() -> None:
+    import streamlit as st
+
+    from presentation.pages import goals
+    from tests.presentation.page_harness import build_context
+
+    # Mantém os repositórios em memória entre os reruns (criar e depositar recarregam).
+    if "harness_ctx" not in st.session_state:
+        st.session_state["harness_ctx"] = build_context()
+    goals.render(st.session_state["harness_ctx"])
+
+
 def _guia() -> None:
     from presentation.pages import guide
 
@@ -183,3 +195,31 @@ def test_app_inclui_guia_na_navegacao(app: AppTest) -> None:
     # O popover "Equações e exemplos" só aparece nas páginas com métricas; a Carteira
     # abre por padrão e o guia está registrado na navegação.
     assert app.header[0].value == "Carteira"
+
+
+def test_objetivos_criar_e_depositar() -> None:
+    at = _run(_objetivos)
+    assert at.header[0].value == "Objetivos"
+    assert any("Nenhum objetivo ainda" in i.value for i in at.info)
+    # Prévia do desafio padrão (R$ 40.000, passo R$ 1, um ano).
+    assert any("282 depósitos de R$ 1,00 a R$ 282,00" in i.value for i in at.info)
+
+    next(b for b in at.button if b.label == "Criar objetivo").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("criado" in s.value for s in at.success)
+    assert [m.label for m in at.metric] == [
+        "Guardado",
+        "Progresso",
+        "Sequência atual",
+        "Constância",
+        "Ritmo",
+    ]
+    assert len(at.get("plotly_chart")) == 2  # calendário e grade de passos
+
+    next(b for b in at.button if b.label == "Registrar").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Passo 1 (R$ 1,00) registrado" in s.value for s in at.success)
+    guardado = next(m for m in at.metric if m.label == "Guardado")
+    assert guardado.value == "R$ 1,00"
+    sequencia = next(m for m in at.metric if m.label == "Sequência atual")
+    assert sequencia.value == "1 dia"

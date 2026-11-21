@@ -22,6 +22,7 @@ from tests.fakes.in_memory_repositories import (
     FakeMarketDataRepository,
     InMemoryChecklistRepository,
     InMemoryPositionRepository,
+    InMemorySavingsGoalRepository,
     InMemoryTradeRepository,
     NoopFundamentalsRefresher,
 )
@@ -75,6 +76,7 @@ def build_container() -> tuple[Container, str]:
         fundamentals=FakeFundamentalsRepository(),
         fundamentals_refresher=NoopFundamentalsRefresher(),
         checklist=InMemoryChecklistRepository(),
+        goals=InMemorySavingsGoalRepository(),
     )
 
     portfolio = portfolios.create_portfolio("user-1", "Principal")
