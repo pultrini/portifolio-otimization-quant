@@ -20,7 +20,9 @@ from presentation.components.formatting import (
     format_pct,
     format_quantity,
 )
+from presentation.components.glossary import help_text
 from presentation.components.session import PageContext
+from presentation.pages import guide
 
 FLASH_KEY = "contribution_flash"
 
@@ -143,7 +145,8 @@ def _flash() -> None:
 def render_decision(ctx: PageContext, result: AssetContributionResult) -> None:
     """Melhor aporte por ativo, notas por classe, checklist e botão Aportar."""
     _flash()
-    st.subheader("Decisão por ativo")
+    st.subheader("Decisão por ativo", help=help_text("quant_score"))
+    guide.links(ctx.guide_page, ["quant_score", "ideal_weight", "sharpe", "sortino", "calmar"])
     st.caption(
         "Nota final = peso quant x nota quant + (1 − peso quant) x checklist. "
         "Dentro de cada classe, o peso ideal de cada ativo é proporcional à nota final; "

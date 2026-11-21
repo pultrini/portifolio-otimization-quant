@@ -19,7 +19,7 @@ from presentation.components.session import (
     select_portfolio,
 )
 from presentation.container import Container, build_container
-from presentation.pages import allocation, metrics, optimization, portfolio, trades
+from presentation.pages import allocation, guide, metrics, optimization, portfolio, trades
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,17 @@ def main() -> None:
         st.info("Crie sua primeira carteira na barra lateral.")
         return
 
-    ctx = PageContext(container, user_id, portfolio_id=selected[0], portfolio_name=selected[1])
+    # O guia não depende da carteira; é criado antes para os links das outras páginas.
+    guide_page = st.Page(
+        guide.render, title="Guia de Métricas", icon="📘", url_path=guide.GUIDE_URL_PATH
+    )
+    ctx = PageContext(
+        container,
+        user_id,
+        portfolio_id=selected[0],
+        portfolio_name=selected[1],
+        guide_page=guide_page,
+    )
     navigation = st.navigation(
         [
             st.Page(_page(portfolio.render, ctx), title="Carteira", icon="💼", default=True),
@@ -146,6 +156,7 @@ def main() -> None:
             st.Page(_page(allocation.render, ctx), title="Alocação Alvo", icon="🎯"),
             st.Page(_page(metrics.render, ctx), title="Métricas por Estratégia", icon="📈"),
             st.Page(_page(optimization.render, ctx), title="Otimização", icon="🧭"),
+            guide_page,
         ]
     )
     navigation.run()
