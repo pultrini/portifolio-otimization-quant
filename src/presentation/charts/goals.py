@@ -16,12 +16,15 @@ def consistency_calendar(active: Iterable[date], start: date, end: date, today: 
     """Calendário estilo GitHub: uma coluna por semana, uma linha por dia da semana.
 
     Azul = dia com depósito; cinza = sem depósito; vazio = dia futuro ou fora do prazo.
+    As colunas cobrem o prazo inteiro do objetivo.
     A leitura é de constância: quanto mais contínua a faixa azul, melhor.
     """
     active_days = set(active)
     first_monday = start - timedelta(days=start.weekday())
+    # Colunas cobrem o prazo inteiro (formato estável desde o 1º dia); só os dias até
+    # hoje recebem cor, os futuros ficam vazios.
     last = min(end, today)
-    weeks = (last - first_monday).days // 7 + 1
+    weeks = (end - first_monday).days // 7 + 1
     z: list[list[float | None]] = [[None] * weeks for _ in range(7)]
     text: list[list[str]] = [[""] * weeks for _ in range(7)]
     for offset in range((last - start).days + 1):

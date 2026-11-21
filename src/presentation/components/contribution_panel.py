@@ -35,7 +35,7 @@ _DECISION_LABELS = {
 }
 
 # Opções do editor: "automática" deixa valer a regra dos dados abertos.
-_AUTO, _YES, _NO = "Automática", "Sim", "Não"
+_AUTO, _NONE, _YES, _NO = "Automática", "Sem resposta", "Sim", "Não"
 
 
 def _score(value: float | None) -> str:
@@ -76,9 +76,11 @@ def _checklist_editor(ctx: PageContext, view: ChecklistView) -> None:
         answers: dict[str, bool | None] = {}
         for q in view.questions:
             default = {None: 0, True: 1, False: 2}[q.manual_answer]
+            # Sem regra automática, a primeira opção significa "sem resposta".
+            first = _AUTO if q.evidence else _NONE
             choice = st.radio(
                 f"**{q.title}**: {q.text}",
-                [_AUTO, _YES, _NO],
+                [first, _YES, _NO],
                 index=default,
                 horizontal=True,
                 key=f"chk_{view.ticker}_{q.key}",
@@ -90,7 +92,7 @@ def _checklist_editor(ctx: PageContext, view: ChecklistView) -> None:
             )
             if q.evidence:
                 st.caption(f"Dado aberto → {_auto_label(q.auto_answer)}: {q.evidence}")
-            answers[q.key] = {_AUTO: None, _YES: True, _NO: False}[choice]
+            answers[q.key] = {_AUTO: None, _NONE: None, _YES: True, _NO: False}[choice]
         if st.form_submit_button("Salvar respostas"):
             try:
                 ctx.container.save_checklist.execute(
@@ -156,6 +158,10 @@ def render_decision(ctx: PageContext, result: AssetContributionResult) -> None:
     if result.orders:
         st.markdown("**Melhor aporte**")
         for order in result.orders:
+            if order.ticker == "CDI":
+                # CDI é aplicação por valor: unidades do índice não dizem nada ao usuário.
+                st.markdown(f"- Aplicar **{format_brl(order.amount)}** em CDI")
+                continue
             st.markdown(
                 f"- Comprar **{format_quantity(order.quantity)} × {order.ticker}** "
                 f"a {format_brl(order.price)} = **{format_brl(order.amount)}**"
