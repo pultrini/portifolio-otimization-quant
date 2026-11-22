@@ -54,6 +54,13 @@ class ParquetFundamentalsRepository(FundamentalsRepository):
                 )
         return result
 
+    def listed_reits(self) -> frozenset[str]:
+        path = self._dir / "reit_profile.parquet"
+        if not path.exists():
+            return frozenset()
+        tickers = pl.scan_parquet(path).select("ticker").collect().to_series()
+        return frozenset(str(t) for t in tickers)
+
     def reit_fundamentals(self, tickers: Sequence[Ticker]) -> dict[Ticker, ReitFundamentals]:
         frame = self._frame("reit_profile", tickers)
         if frame is None:

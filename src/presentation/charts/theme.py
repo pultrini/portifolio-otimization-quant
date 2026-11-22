@@ -16,6 +16,8 @@ AQUA = "#1baf7a"
 YELLOW = "#eda100"
 MAGENTA = "#e87ba4"
 RED = "#e34948"
+VIOLET = "#7f63d9"
+OLIVE = "#7ea33a"
 NEUTRAL = "#8a8984"
 MUTED_GRID = "rgba(128, 128, 128, 0.18)"
 
@@ -30,6 +32,8 @@ ASSET_CLASS_COLORS: dict[AssetClass, str] = {
     AssetClass.BR_FIXED_INCOME: AQUA,
     AssetClass.INTL_FIXED_INCOME: YELLOW,
     AssetClass.CRYPTO: MAGENTA,
+    AssetClass.BR_REAL_ESTATE: VIOLET,
+    AssetClass.INTL_REAL_ESTATE: OLIVE,
 }
 
 # Divergente azul <-> vermelho com cinza neutro no meio (correlação -1..1).

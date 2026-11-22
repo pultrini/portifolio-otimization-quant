@@ -17,6 +17,7 @@ from application.use_cases.import_positions import (
 )
 from application.use_cases.positions import DeletePosition, ListPositions, UpdatePosition
 from application.use_cases.trades import ListTrades, RegisterTrade
+from domain.entities.fundamentals import ReitFundamentals
 from domain.exceptions import DomainError, InsufficientQuantityError
 from domain.value_objects.asset_class import AssetClass
 from domain.value_objects.strategy_type import StrategyType, TradeSide
@@ -222,3 +223,54 @@ def test_lista_de_desejos() -> None:
     assert wish is not None
     assert wish.average_price.amount == 0
     assert not wish.manual_override
+
+
+def test_reclassifica_fiis_e_reits_que_estavam_em_renda_variavel() -> None:
+    from application.use_cases.positions import ReclassifyRealEstate
+    from domain.entities.position import Position
+    from domain.value_objects.money import Money
+    from tests.fakes.in_memory_repositories import FakeFundamentalsRepository
+
+    positions = InMemoryPositionRepository()
+    old = [
+        ("MXRF11", AssetClass.BR_EQUITY),  # FII da carteira antiga
+        ("TAEE11", AssetClass.BR_EQUITY),  # unit: continua em renda variável
+        ("O", AssetClass.INTL_EQUITY),  # REIT americano
+        ("VISC11", AssetClass.BR_FIXED_INCOME),  # classe escolhida à mão: não mexe
+    ]
+    positions.save_positions(
+        "u",
+        "p",
+        [Position(Ticker(t), c, Decimal("2"), Money.brl("10"), True) for t, c in old],
+    )
+    fundamentals = FakeFundamentalsRepository(reits={"MXRF11": ReitFundamentals("MXRF11")})
+    use_case = ReclassifyRealEstate(positions, fundamentals)
+
+    preview = {r.ticker: r.proposed for r in use_case.preview("p")}
+    assert preview == {
+        "MXRF11": AssetClass.BR_REAL_ESTATE,
+        "O": AssetClass.INTL_REAL_ESTATE,
+    }
+    use_case.execute("u", "p")
+    classes = {p.ticker.symbol: p.asset_class for p in positions.list_positions("p")}
+    assert classes["MXRF11"] is AssetClass.BR_REAL_ESTATE
+    assert classes["O"] is AssetClass.INTL_REAL_ESTATE
+    assert classes["TAEE11"] is AssetClass.BR_EQUITY
+    assert classes["VISC11"] is AssetClass.BR_FIXED_INCOME
+    # Quantidade e preço médio intactos; segunda execução não muda nada.
+    mxrf = positions.get_position("p", Ticker("MXRF11"))
+    assert mxrf is not None and mxrf.quantity == Decimal("2") and mxrf.manual_override
+    assert use_case.preview("p") == []
+
+
+def test_importacao_usa_a_lista_de_fiis_da_cvm() -> None:
+    from tests.fakes.in_memory_repositories import FakeFundamentalsRepository
+
+    positions = InMemoryPositionRepository()
+    fundamentals = FakeFundamentalsRepository(reits={"ABCD11": ReitFundamentals("ABCD11")})
+    ImportPositions(positions, _market(), fundamentals=fundamentals).execute(
+        ImportPositionsRequest(user_id="u", portfolio_id="p", text="ABCD11 0 0\nWXYZ11 0 0")
+    )
+    classes = {p.ticker.symbol: p.asset_class for p in positions.list_positions("p")}
+    # Com a lista da CVM, só ABCD11 é FII; WXYZ11 (fora dela) fica em renda variável.
+    assert classes == {"ABCD11": AssetClass.BR_REAL_ESTATE, "WXYZ11": AssetClass.BR_EQUITY}

@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from application.dtos.portfolio import ImportPositionsRequest, ImportPositionsResponse
 from domain.entities.position import Position
 from domain.exceptions import DomainError
+from domain.repositories.fundamentals_repository import FundamentalsRepository
 from domain.repositories.market_data_repository import MarketDataRefresher, MarketDataRepository
 from domain.repositories.position_repository import PositionRepository
 from domain.services.asset_classification import infer_asset_class
@@ -126,9 +127,12 @@ class ImportPositions:
         market_data: MarketDataRepository,
         refresher: MarketDataRefresher | None = None,
         years: int = 5,
+        fundamentals: FundamentalsRepository | None = None,
     ) -> None:
         self._positions = positions
         self._market_data = market_data
+        # Opcional: lista de FIIs da CVM, para separar FII de unit/ETF com final 11.
+        self._fundamentals = fundamentals
         # Opcional: se presente, cotações que faltam são baixadas antes de converter.
         self._refresher = refresher
         self._years = years
@@ -156,10 +160,11 @@ class ImportPositions:
             self._refresher.refresh(missing, self._years)
             prices = self._market_data.latest_prices(by_value)
 
+        listed_reits = self._fundamentals.listed_reits() if self._fundamentals else frozenset()
         positions: list[Position] = []
         for item in parsed:
             try:
-                positions.append(self._to_position(item, prices))
+                positions.append(self._to_position(item, prices, listed_reits))
             except DomainError as error:
                 errors.append(f"Linha {item.line_number} ({item.ticker}): {error}")
 
@@ -174,8 +179,10 @@ class ImportPositions:
         return ImportPositionsResponse(imported=[p.ticker.symbol for p in positions], errors=errors)
 
     @staticmethod
-    def _to_position(item: ParsedLine, prices: dict[Ticker, Money]) -> Position:
-        asset_class = infer_asset_class(item.ticker)
+    def _to_position(
+        item: ParsedLine, prices: dict[Ticker, Money], listed_reits: frozenset[str]
+    ) -> Position:
+        asset_class = infer_asset_class(item.ticker, listed_reits)
         if item.quantity is not None and item.average_price is not None:
             if item.quantity == 0:
                 # Lista de desejos: sem cotas, o preço médio não significa nada.

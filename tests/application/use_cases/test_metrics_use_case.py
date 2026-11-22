@@ -46,7 +46,11 @@ def test_escopos_carteira_e_classe() -> None:
 
     report = use_case.execute(MetricsRequest(portfolio_id="p", lookback_years=1))
     keys = [s.key for s in report.scopes]
-    assert keys == ["portfolio", "BR_EQUITY"]
+    # WXYZ11 é FII: classe própria, com o IFIX (ETF XFIX11) como benchmark. Sem a série
+    # do benchmark baixada, só esse escopo fica com erro; os demais seguem calculados.
+    assert keys == ["portfolio", "BR_EQUITY", "BR_REAL_ESTATE"]
+    assert report.scopes[2].benchmark == "XFIX11"
+    assert report.scopes[2].error is not None and "XFIX11" in report.scopes[2].error
 
     portfolio = report.scopes[0]
     assert portfolio.error is None

@@ -2,11 +2,18 @@
 
 from decimal import Decimal
 
-from application.dtos.portfolio import PositionRow, PositionsView, UpdatePositionRequest
+from application.dtos.portfolio import (
+    PositionRow,
+    PositionsView,
+    ReclassificationRow,
+    UpdatePositionRequest,
+)
 from domain.entities.position import Position
 from domain.exceptions import DomainError
+from domain.repositories.fundamentals_repository import FundamentalsRepository
 from domain.repositories.market_data_repository import MarketDataRepository
 from domain.repositories.position_repository import PositionRepository
+from domain.services.asset_classification import infer_asset_class
 from domain.services.average_price import override_average_price
 from domain.value_objects.asset_class import AssetClass
 from domain.value_objects.money import Money
@@ -117,3 +124,58 @@ class DeletePosition:
 
     def execute(self, portfolio_id: str, ticker: str) -> None:
         self._positions.delete_position(portfolio_id, Ticker.parse(ticker))
+
+
+# Só posições nestas classes são candidatas: antes da 0.5.0 os FIIs entravam em Renda
+# Variável Brasil e os REITs em Renda Variável Internacional.
+_EQUITY_TO_REAL_ESTATE = {
+    AssetClass.BR_EQUITY: AssetClass.BR_REAL_ESTATE,
+    AssetClass.INTL_EQUITY: AssetClass.INTL_REAL_ESTATE,
+}
+
+
+class ReclassifyRealEstate:
+    """Move FIIs e REITs das classes de renda variável para as classes imobiliárias.
+
+    `preview` lista o que mudaria; `execute` grava. Só troca posições cuja classe atual
+    é a de renda variável correspondente (BR_EQUITY -> BR_REAL_ESTATE, INTL_EQUITY ->
+    INTL_REAL_ESTATE), para nunca desfazer uma classe escolhida à mão em outra classe.
+    """
+
+    def __init__(self, positions: PositionRepository, fundamentals: FundamentalsRepository) -> None:
+        self._positions = positions
+        self._fundamentals = fundamentals
+
+    def preview(self, portfolio_id: str) -> list[ReclassificationRow]:
+        listed = self._fundamentals.listed_reits()
+        rows: list[ReclassificationRow] = []
+        for position in self._positions.list_positions(portfolio_id):
+            target = _EQUITY_TO_REAL_ESTATE.get(position.asset_class)
+            if target is not None and infer_asset_class(position.ticker, listed) is target:
+                rows.append(
+                    ReclassificationRow(
+                        ticker=position.ticker.symbol,
+                        current=position.asset_class,
+                        proposed=target,
+                    )
+                )
+        return rows
+
+    def execute(self, user_id: str, portfolio_id: str) -> list[ReclassificationRow]:
+        rows = self.preview(portfolio_id)
+        if not rows:
+            return rows
+        by_ticker = {r.ticker: r.proposed for r in rows}
+        moved = [
+            Position(
+                ticker=p.ticker,
+                asset_class=by_ticker[p.ticker.symbol],
+                quantity=p.quantity,
+                average_price=p.average_price,
+                manual_override=p.manual_override,
+            )
+            for p in self._positions.list_positions(portfolio_id)
+            if p.ticker.symbol in by_ticker
+        ]
+        self._positions.save_positions(user_id, portfolio_id, moved)
+        return rows

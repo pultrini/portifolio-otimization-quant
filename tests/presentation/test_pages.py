@@ -165,8 +165,8 @@ def test_pagina_metricas() -> None:
     assert "### Por classe de ativo" in texts
     assert "### Por estratégia" in texts
     assert any(m.label == "Win rate" for m in at.metric)
-    # Carteira, 3 classes (RV, RF, cripto) e 1 estratégia: um gráfico por escopo.
-    assert len(at.get("plotly_chart")) == 5
+    # Carteira, 4 classes (RV, FII, RF, cripto) e 1 estratégia: um gráfico por escopo.
+    assert len(at.get("plotly_chart")) == 6
     assert not at.error
 
 
@@ -185,7 +185,8 @@ def test_pagina_otimizacao() -> None:
     texts = [m.value for m in at.markdown]
     # Lista de desejos entra na simulação, e o perfil alvo define o peso das classes.
     assert any(t.startswith("**DDDD3**") and "desejado" in t for t in texts)
-    assert any("simulada **60,00%**" in t and "alvo 60,00%" in t for t in texts)
+    assert any("simulada **50,00%**" in t and "alvo 50,00%" in t for t in texts)
+    assert any("FII" in t and "alvo 10,00%" in t for t in texts)
 
 
 def test_simulacao_sem_perfil_alvo_e_com_aporte() -> None:

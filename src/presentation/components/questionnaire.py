@@ -37,6 +37,8 @@ PILL_COLORS: dict[AssetClass, str] = {
     AssetClass.BR_FIXED_INCOME: "#f5d48f",
     AssetClass.INTL_FIXED_INCOME: "#f3b38a",
     AssetClass.CRYPTO: "#f6a9c9",
+    AssetClass.BR_REAL_ESTATE: "#c9b6f7",
+    AssetClass.INTL_REAL_ESTATE: "#b9e38f",
 }
 _PILL_STYLE = (
     "display:inline-block;padding:6px 14px;border-radius:999px;font-weight:600;"
@@ -51,6 +53,8 @@ SHORT_LABELS: dict[AssetClass, str] = {
     AssetClass.BR_FIXED_INCOME: "RF Brasil",
     AssetClass.INTL_FIXED_INCOME: "RF Exterior",
     AssetClass.CRYPTO: "Cripto",
+    AssetClass.BR_REAL_ESTATE: "FII",
+    AssetClass.INTL_REAL_ESTATE: "REITs",
 }
 
 
