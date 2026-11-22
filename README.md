@@ -53,13 +53,21 @@ Tickers suportados:
 
 | Tipo | Exemplo | Fonte |
 |---|---|---|
-| Ações, FIIs, units, BDRs da B3 | `PETR4`, `MXRF11`, `AAPL34` | Yahoo Finance (`.SA`) |
+| Ações, units, ETFs e BDRs da B3 | `PETR4`, `TAEE11`, `AAPL34` | Yahoo Finance (`.SA`) |
+| Fundos imobiliários (FII) | `MXRF11`, `HGLG11` | Yahoo Finance (`.SA`); cadastro e informes na CVM |
+| REITs americanos e ETFs de REITs | `O`, `PLD`, `VNQ` | Yahoo Finance (USD → BRL pela PTAX) |
 | Ações e ETFs americanos | `AAPL`, `IVV`, `AGG` | Yahoo Finance (USD → BRL pela PTAX) |
 | Cripto | `BTC`, `ETH` | Yahoo Finance (`-USD` → BRL pela PTAX) |
 | CDI | `CDI` | Banco Central (SGS 12), como índice acumulado |
 | Tesouro Direto | `NTNB-2060`, `IPCA-2035`, `PRE-2029`, `SELIC-2029` | CSV oficial do Tesouro |
 
 Linhas por valor viram quantidade com a última cotação: `quantidade = valor / preço`.
+
+FIIs e REITs têm classes próprias (**Fundos Imobiliários (FII)**, benchmark IFIX pelo ETF
+XFIX11, e **REITs (Internacional)**, benchmark VNQ). Um ticker com final 11 é FII quando
+está na lista de FIIs da CVM (baixada em **Atualizar fundamentos**); antes disso, vale o
+formato, com exceção das units e ETFs conhecidos. Posições antigas de FII/REIT em renda
+variável aparecem com o botão **Mover para a classe imobiliária** na página Carteira.
 
 ## Páginas
 

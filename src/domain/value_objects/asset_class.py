@@ -7,6 +7,10 @@ from enum import StrEnum
 IBOV = "^BVSP"
 SP500 = "^GSPC"
 US_AGGREGATE_BOND = "AGG"  # ETF iShares Core US Aggregate Bond, proxy do índice.
+# O Yahoo não publica a série do IFIX; o ETF XFIX11 (Itaú) replica o índice e serve de
+# proxy, como o AGG para o índice de bonds americano.
+IFIX = "XFIX11"
+US_REITS = "VNQ"  # ETF Vanguard Real Estate (MSCI US IMI Real Estate 25/50).
 BITCOIN = "BTC"
 CDI = "CDI"
 US_TREASURY_3M = "TBILL3M"
@@ -28,6 +32,8 @@ class AssetClass(StrEnum):
     BR_FIXED_INCOME = "BR_FIXED_INCOME"
     INTL_FIXED_INCOME = "INTL_FIXED_INCOME"
     CRYPTO = "CRYPTO"
+    BR_REAL_ESTATE = "BR_REAL_ESTATE"  # fundos imobiliários (FII) da B3
+    INTL_REAL_ESTATE = "INTL_REAL_ESTATE"  # REITs americanos e ETFs de REITs
 
     @property
     def label_pt(self) -> str:
@@ -59,6 +65,8 @@ _LABELS_PT: dict[AssetClass, str] = {
     AssetClass.BR_FIXED_INCOME: "Renda Fixa Brasil",
     AssetClass.INTL_FIXED_INCOME: "Renda Fixa Internacional",
     AssetClass.CRYPTO: "Criptoativos",
+    AssetClass.BR_REAL_ESTATE: "Fundos Imobiliários (FII)",
+    AssetClass.INTL_REAL_ESTATE: "REITs (Internacional)",
 }
 
 _BENCHMARKS: dict[AssetClass, str] = {
@@ -67,6 +75,8 @@ _BENCHMARKS: dict[AssetClass, str] = {
     AssetClass.BR_FIXED_INCOME: CDI,
     AssetClass.INTL_FIXED_INCOME: US_AGGREGATE_BOND,
     AssetClass.CRYPTO: BITCOIN,
+    AssetClass.BR_REAL_ESTATE: IFIX,
+    AssetClass.INTL_REAL_ESTATE: US_REITS,
 }
 
 _RISK_FREE: dict[AssetClass, str] = {
@@ -75,4 +85,6 @@ _RISK_FREE: dict[AssetClass, str] = {
     AssetClass.BR_FIXED_INCOME: CDI,
     AssetClass.INTL_FIXED_INCOME: US_TREASURY_3M,
     AssetClass.CRYPTO: US_TREASURY_3M,
+    AssetClass.BR_REAL_ESTATE: CDI,
+    AssetClass.INTL_REAL_ESTATE: US_TREASURY_3M,
 }

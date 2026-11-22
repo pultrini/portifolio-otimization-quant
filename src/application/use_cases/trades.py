@@ -4,6 +4,7 @@ from datetime import UTC
 
 from application.dtos.portfolio import RegisterTradeRequest, TradeRow
 from domain.entities.trade import Trade
+from domain.repositories.fundamentals_repository import FundamentalsRepository
 from domain.repositories.position_repository import PositionRepository
 from domain.repositories.trade_repository import TradeRepository
 from domain.services.asset_classification import infer_asset_class
@@ -29,9 +30,15 @@ def _to_row(trade: Trade) -> TradeRow:
 class RegisterTrade:
     """Registra uma operação e atualiza a posição com a regra de preço médio."""
 
-    def __init__(self, positions: PositionRepository, trades: TradeRepository) -> None:
+    def __init__(
+        self,
+        positions: PositionRepository,
+        trades: TradeRepository,
+        fundamentals: FundamentalsRepository | None = None,
+    ) -> None:
         self._positions = positions
         self._trades = trades
+        self._fundamentals = fundamentals  # lista de FIIs da CVM para ativo novo
 
     def execute(self, request: RegisterTradeRequest) -> TradeRow:
         """Valida a operação, recalcula a posição e grava as duas juntas.
@@ -54,7 +61,11 @@ class RegisterTrade:
         current = self._positions.get_position(request.portfolio_id, ticker)
         # Classe: a informada, senão a da posição existente, senão a inferida do ticker.
         asset_class = request.asset_class or (
-            current.asset_class if current is not None else infer_asset_class(ticker)
+            current.asset_class
+            if current is not None
+            else infer_asset_class(
+                ticker, self._fundamentals.listed_reits() if self._fundamentals else ()
+            )
         )
         resulting = apply_trade(current, trade, asset_class)
         trade_id = self._trades.record_trade(

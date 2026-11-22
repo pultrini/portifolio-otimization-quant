@@ -191,6 +191,27 @@ def _questionnaire(ctx: PageContext, ticker: str, asset_class: AssetClass) -> No
         render_form(ctx, view, "portfolio")
 
 
+def _reclassify_notice(ctx: PageContext) -> None:
+    """Oferece mover FIIs e REITs da renda variável para as classes imobiliárias."""
+    rows = ctx.container.reclassify_real_estate.preview(ctx.portfolio_id)
+    if not rows:
+        return
+    moves = ", ".join(f"{r.ticker} → {r.proposed.label_pt}" for r in rows)
+    with st.container(border=True):
+        st.markdown(
+            "**FIIs e REITs agora têm classe própria.** Estes ativos estão em renda "
+            f"variável: {moves}."
+        )
+        st.caption(
+            "Depois de mover, defina um alvo para a nova classe em Alocação Alvo: com "
+            "alvo 0% ela não recebe aporte. Dá para voltar a classe em Editar posição."
+        )
+        if st.button("Mover para a classe imobiliária", type="primary"):
+            ctx.container.reclassify_real_estate.execute(ctx.user_id, ctx.portfolio_id)
+            cache.invalidate()
+            st.rerun()
+
+
 def _refresh_button(ctx: PageContext) -> None:
     """Roda o pipeline medalhão para os ativos da carteira e limpa os caches."""
     if not st.button("Atualizar dados de mercado", help="Baixa cotações, CDI e câmbio."):
@@ -241,6 +262,7 @@ def render(ctx: PageContext) -> None:
     st.header("Carteira")
     st.caption(f"Carteira: {ctx.portfolio_name}")
     _refresh_button(ctx)
+    _reclassify_notice(ctx)
     view = ctx.container.list_positions.execute(ctx.portfolio_id)
     _positions_table(view)
     _watchlist(ctx, view)

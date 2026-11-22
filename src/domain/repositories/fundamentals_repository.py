@@ -15,6 +15,10 @@ class FundamentalsRepository(Protocol):
 
     def reit_fundamentals(self, tickers: Sequence[Ticker]) -> dict[Ticker, ReitFundamentals]: ...
 
+    def listed_reits(self) -> frozenset[str]:
+        """Tickers de todos os FIIs com informe na CVM; vazio antes do primeiro download."""
+        ...
+
 
 class FundamentalsRefresher(Protocol):
     """Baixa e processa fundamentos (Yahoo Finance e CVM) dos tickers."""
