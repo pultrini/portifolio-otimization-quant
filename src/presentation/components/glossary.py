@@ -8,12 +8,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
 import numpy as np
 
 from domain.services import metrics as m
 from domain.services.contribution_decision import Candidate, final_score, quant_scores
+from domain.services.mark_to_market import mark_to_market
 from domain.services.optimization import (
     AssetUniverse,
     max_sharpe,
@@ -203,6 +205,23 @@ def _ex_ideal_weight() -> str:
         "Notas finais 80 (A) e 20 (B): pesos ideais 80% e 20%. Classe com R$ 0 e aporte de "
         "R$ 100: alvos R$ 80 e R$ 20. Com A a R$ 10 e B a R$ 7: 8 cotas de A e 2 de B "
         "(R$ 94); sobram R$ 6, menos que uma cota de qualquer um."
+    )
+
+
+def _ex_mark_to_market() -> str:
+    today, maturity = date(2026, 11, 19), date(2031, 1, 1)
+    result = mark_to_market(
+        Ticker("PRE-2031"), maturity, today, Decimal("2"), 555.79, 0.1547, 0.1535, 0.13
+    )
+    return (
+        "2 títulos Tesouro Prefixado 2031 comprados a 13% a.a.; hoje o resgate paga "
+        "15,47% a.a. (PU R$ 555,79), com "
+        f"{result.business_days} dias úteis até o vencimento.\n\n"
+        f"- Vender hoje: 2 × R$ 555,79 = **{format_brl(result.sale_value)}**\n"
+        f"- Valor na curva (13%): **{format_brl(result.curve_value)}**\n"
+        f"- Diferença: **{format_brl(result.difference)}**: a taxa subiu, a marcação está "
+        "contra. Vender realiza essa perda; levando até 2031 o título paga os 13% "
+        "contratados (R$ 2.000 no vencimento)."
     )
 
 
@@ -449,6 +468,24 @@ DOCS: tuple[MetricDoc, ...] = (
         "Use para ver quais ativos desejados melhorariam a relação risco-retorno e onde a "
         "carteira está concentrada; confirme com o checklist antes de mudar algo.",
         _ex_simulation,
+    ),
+    MetricDoc(
+        "mark_to_market",
+        "Renda fixa",
+        "Marcação a mercado",
+        "Compara vender o título hoje (preço de mercado) com levá-lo até o vencimento "
+        "(taxa contratada). Diferença positiva: vender hoje dá mais que o valor na curva.",
+        r"V_{curva} = PU_{venda} \cdot \frac{f(r_{contratada})}{f(r_{venda})},\quad "
+        r"f(r) = (1 + r)^{-du/252}",
+        "O preço de um título prefixado ou IPCA+ cai quando as taxas sobem e sobe quando "
+        "caem. O valor na curva é o que o título valeria se o mercado ainda pagasse a sua "
+        "taxa. Na NTN-B com juros, f(r) soma também os cupons semestrais de 2,956%. A "
+        "base (R$ 1.000 ou o VNA do IPCA) se cancela, por isso não precisa ser baixada.",
+        "Diferença positiva: o mercado antecipou ganho. Vender só vale mais que levar até o "
+        "fim se o dinheiro render, até o mesmo vencimento, acima da taxa de resgate de "
+        "hoje (o empate). Diferença negativa: vender realiza perda; levando até o fim, a "
+        "taxa contratada é garantida. Não considera IR nem custos.",
+        _ex_mark_to_market,
     ),
     MetricDoc(
         "quant_score",

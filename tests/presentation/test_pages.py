@@ -283,3 +283,24 @@ def test_objetivos_criar_e_depositar() -> None:
     assert guardado.value == "R$ 1,00"
     sequencia = next(m for m in at.metric if m.label == "Sequência atual")
     assert sequencia.value == "1 dia"
+
+
+def test_marcacao_a_mercado_na_aba_de_renda_fixa() -> None:
+    at = _run(_metricas)
+    texts = [m.value for m in at.markdown]
+    assert "#### Marcação a mercado" in texts
+    assert any(t.startswith("**PRE-2031** · Tesouro Prefixado") for t in texts)
+    # Sem taxa contratada: o formulário aparece e pede a taxa.
+    rate = next(n for n in at.number_input if n.label.startswith("Taxa contratada (% a.a.)"))
+    rate.set_value(13.0)
+    save = next(b for b in at.button if b.label == "Salvar taxa")
+    save.click()
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("PRE-2031: taxa contratada 13,00% a.a." in s.value for s in at.success)
+    labels = [m.label for m in at.metric]
+    assert "Vender hoje" in labels and "Diferença da marcação" in labels
+    sale = next(m for m in at.metric if m.label == "Vender hoje")
+    assert sale.value == "R$ 1.111,58"
+    # Taxa subiu de 13% para 15,47%: marcação contra, levar até o fim garante os 13%.
+    assert any("Marcação contra" in i.value for i in at.info)

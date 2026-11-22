@@ -31,9 +31,11 @@ from infrastructure.data_engineering.schemas import (
     GOLD_FX,
     GOLD_PRICES,
     GOLD_RETURNS,
+    GOLD_TREASURY,
     GOLD_VOLATILITY,
     SILVER_PRICES,
     SILVER_RATES,
+    SILVER_TREASURY,
     TESOURO_BRONZE,
     YAHOO_BRONZE,
     validate,
@@ -223,6 +225,57 @@ def build_silver_prices(data_dir: Path) -> int:
     return _write(prices, data_dir / "silver" / "prices.parquet")
 
 
+def build_silver_treasury(data_dir: Path) -> int:
+    """Taxas e PUs do Tesouro Direto, tipados (taxas em fração), um ticker por vencimento.
+
+    O CSV traz PU e taxa de compra (o investidor compra; liquida em D+1) e de venda
+    (resgate antecipado; liquida em D+0). Linhas sem PU de venda (títulos que só
+    aparecem para compra) ficam, com valores nulos, para não perder o histórico.
+    """
+    out = data_dir / "silver" / "treasury.parquet"
+    tesouro = _scan_bronze(data_dir, Source.TESOURO)
+    if tesouro is None:
+        return _write(pl.DataFrame(schema=SILVER_TREASURY), out)
+    prefix_by_type = {name: prefix for prefix, name in TESOURO_TYPES.items()}
+    latest = _latest_snapshot(
+        tesouro.select(with_ingestion(TESOURO_BRONZE).names()).with_columns(
+            pl.lit("all").alias("_key")
+        ),
+        "_key",
+    )
+    treasury = (
+        latest.filter(pl.col("tipo_titulo").is_in(list(prefix_by_type)))
+        .select(
+            pl.col("data_base").str.to_date("%d/%m/%Y").alias("date"),
+            (
+                pl.col("tipo_titulo").replace_strict(prefix_by_type, return_dtype=pl.String)
+                + "-"
+                + pl.col("data_vencimento").str.slice(6, 4)
+            ).alias("ticker"),
+            pl.col("data_vencimento").str.to_date("%d/%m/%Y").alias("maturity"),
+            (_br_number("taxa_compra_manha") / 100).alias("buy_rate"),
+            (_br_number("taxa_venda_manha") / 100).alias("sell_rate"),
+            _br_number("pu_compra_manha").alias("pu_buy"),
+            _br_number("pu_venda_manha").alias("pu_sell"),
+            _br_number("pu_base_manha").alias("pu_base"),
+        )
+        .sort("ticker", "date", "maturity")
+        # Mesma regra da tabela de preços: dois vencimentos no mesmo ano -> o primeiro.
+        .unique(subset=["ticker", "date"], keep="first", maintain_order=True)
+        .with_columns(
+            # PU zero no CSV significa "sem cotação naquele lado".
+            *(
+                pl.when(pl.col(c) > 0).then(pl.col(c)).otherwise(None).alias(c)
+                for c in ("pu_buy", "pu_sell", "pu_base")
+            )
+        )
+        .select(SILVER_TREASURY.names())
+        .collect()
+    )
+    validate(treasury, SILVER_TREASURY, "silver/treasury")
+    return _write(treasury, out)
+
+
 def build_silver_rates(data_dir: Path) -> int:
     """Taxas e câmbio: CDI, Selic e PTAX (SGS) e T-Bill 3M (^IRX), como Float64."""
     parts: list[pl.DataFrame] = []
@@ -363,6 +416,14 @@ def build_gold(data_dir: Path) -> dict[str, int]:
         .select(GOLD_PRICES.names())
     )
     counts["prices"] = _write(validate(prices, GOLD_PRICES, "gold/prices"), gold / "prices.parquet")
+
+    # Tesouro com taxas: pronto para a marcação a mercado (último dia e histórico).
+    treasury_path = data_dir / "silver" / "treasury.parquet"
+    if treasury_path.exists():
+        treasury = pl.read_parquet(treasury_path).sort("ticker", "date")
+        counts["treasury"] = _write(
+            validate(treasury, GOLD_TREASURY, "gold/treasury"), gold / "treasury.parquet"
+        )
 
     # Retornos no calendário de cada ativo:
     #   simples = P_t / P_{t-1} - 1 ; log = ln(P_t / P_{t-1})

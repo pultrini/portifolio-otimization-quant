@@ -11,6 +11,7 @@ from decimal import Decimal
 import numpy as np
 
 from application.dtos.portfolio import ImportPositionsRequest, RegisterTradeRequest
+from domain.entities.treasury import TreasuryQuote
 from domain.repositories.market_data_repository import RefreshReport
 from domain.value_objects.strategy_type import StrategyType, TradeSide
 from domain.value_objects.ticker import Ticker
@@ -20,6 +21,8 @@ from tests.fakes.in_memory_portfolio_repository import InMemoryPortfolioReposito
 from tests.fakes.in_memory_repositories import (
     FakeFundamentalsRepository,
     FakeMarketDataRepository,
+    FakeTreasuryRepository,
+    InMemoryBondTermsRepository,
     InMemoryChecklistRepository,
     InMemoryPositionRepository,
     InMemorySavingsGoalRepository,
@@ -28,6 +31,16 @@ from tests.fakes.in_memory_repositories import (
 )
 
 BRT = timezone(timedelta(hours=-3))
+
+# Cotações reais do CSV do Tesouro (19/11/2026): resgate e compra do Prefixado 2031 e do
+# IPCA+ com juros 2060; em 01/06/2024 só o lado de compra, para a estimativa da taxa.
+TREASURY_QUOTES = [
+    TreasuryQuote("PRE-2031", date(2026, 11, 19), date(2031, 1, 1), 0.1535, 0.1547, 558.47, 555.79),
+    TreasuryQuote(
+        "NTNB-2060", date(2026, 11, 19), date(2060, 8, 15), 0.0758, 0.0770, 3977.74, 3917.97
+    ),
+    TreasuryQuote("PRE-2031", date(2024, 6, 3), date(2031, 1, 1), 0.1180, None, 480.0, None),
+]
 N = 400
 END = date(2026, 11, 19)
 
@@ -56,6 +69,8 @@ def _market() -> FakeMarketDataRepository:
             "^BVSP": walk(130000.0, 0.0003, 0.011),
             "XFIX11": walk(10.0, 0.0002, 0.005),
             "CDI": [1.0005**i for i in range(N)],
+            "PRE-2031": walk(540.0, 0.0004, 0.004),
+            "NTNB-2060": walk(3900.0, 0.0003, 0.008),
             "TBILL3M": [1.00016**i for i in range(N)],
         },
     )
@@ -78,6 +93,8 @@ def build_container() -> tuple[Container, str]:
         fundamentals_refresher=NoopFundamentalsRefresher(),
         checklist=InMemoryChecklistRepository(),
         goals=InMemorySavingsGoalRepository(),
+        treasury=FakeTreasuryRepository(TREASURY_QUOTES),
+        bond_terms=InMemoryBondTermsRepository(),
     )
 
     portfolio = portfolios.create_portfolio("user-1", "Principal")
@@ -85,7 +102,10 @@ def build_container() -> tuple[Container, str]:
         ImportPositionsRequest(
             user_id="user-1",
             portfolio_id=portfolio.id,
-            text="AAAA3 10 24,00\nBBBB4 5 38\nCCCC11 3 95\nCDI R$ 600\nBTC R$ 150 170\nDDDD3 0 0",
+            text=(
+                "AAAA3 10 24,00\nBBBB4 5 38\nCCCC11 3 95\nCDI R$ 600\nBTC R$ 150 170\n"
+                "DDDD3 0 0\nPRE-2031 2 500\nNTNB-2060 0,05 3500"
+            ),
         )
     )
     portfolios.save_allocation_targets(

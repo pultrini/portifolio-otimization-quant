@@ -22,6 +22,7 @@ from infrastructure.data_engineering.layers import (
     build_gold,
     build_silver_prices,
     build_silver_rates,
+    build_silver_treasury,
     write_bronze,
 )
 from infrastructure.data_engineering.schemas import BCB_BRONZE, TESOURO_BRONZE, YAHOO_BRONZE
@@ -124,7 +125,11 @@ class MedallionPipeline(MarketDataRefresher):
                 failures, all_titles, self._tesouro.fetch, TESOURO_BRONZE, ingested_at
             )
 
-        silver_rows = build_silver_prices(self._data_dir) + build_silver_rates(self._data_dir)
+        silver_rows = (
+            build_silver_prices(self._data_dir)
+            + build_silver_rates(self._data_dir)
+            + build_silver_treasury(self._data_dir)
+        )
         gold_counts = build_gold(self._data_dir)
 
         # Ticker pedido que não chegou à Gold (ex.: título do Tesouro inexistente).
