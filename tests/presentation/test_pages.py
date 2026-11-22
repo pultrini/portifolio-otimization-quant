@@ -110,11 +110,18 @@ def test_aportar_registra_e_confirma() -> None:
     texts = [m.value for m in at.markdown]
     assert "**Melhor aporte**" in texts
     assert any("Comprar **" in t for t in texts)
-    # Lista de desejos (DDDD3) concorre na renda variável.
-    tables = [d.value for d in at.dataframe]
-    assert any("DDDD3 (desejado)" in str(t) for t in tables)
-    # Checklist editável para ações e FIIs.
-    assert any(e.label.startswith("Checklist AAAA3") for e in at.expander)
+    # Lista de ativos (sem tabela): DDDD3 aparece marcado como desejado.
+    texts = [m.value for m in at.markdown]
+    assert any(t.startswith("**DDDD3**") and "desejado" in t for t in texts)
+    assert not at.dataframe or all("Nota quant" not in str(d.value) for d in at.dataframe)
+    # Resumo por classe com atual -> alvo.
+    assert any("atual **" in t and "alvo **" in t for t in texts)
+    # Sem perguntas na página: elas abrem na janela do questionário.
+    assert not at.radio
+    questionnaire = next(b for b in at.button if b.label == "📝 Questionário")
+    questionnaire.click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(at.radio) >= 6  # perguntas do ativo, dentro da janela
 
     aportar = next(b for b in at.button if b.label == "Aportar")
     aportar.click().run()

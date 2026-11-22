@@ -8,6 +8,7 @@ import pytest
 from domain.entities.fundamentals import AnnualFigures, ReitFundamentals, StockFundamentals
 from domain.services.checklist_rules import is_discarded, reit_answers, stock_answers
 from domain.services.contribution_decision import (
+    AssetDecision,
     Candidate,
     Decision,
     decide_class,
@@ -216,3 +217,46 @@ def test_abaixo_do_ideal_mas_aporte_nao_chega_aguarda() -> None:
     assert "mais abaixo" in by["BBBB3"].reason
     assert by["CCCC3"].decision is Decision.WAIT
     assert "peso ideal ou acima" in by["CCCC3"].reason
+
+
+def _decision(
+    ticker: str, price: str, target: str, amount: str, qty: str, score: float
+) -> AssetDecision:
+    return AssetDecision(
+        ticker=Ticker(ticker),
+        quant_score=score,
+        checklist_score=score,
+        final_score=score,
+        ideal_weight=1.0,
+        current_value=D("0"),
+        target_value=D(target),
+        quantity=D(qty),
+        amount=D(amount),
+        decision=Decision.BUY if D(qty) > 0 else Decision.WAIT,
+        price=D(price),
+    )
+
+
+def test_troco_vai_para_classes_abaixo_do_alvo() -> None:
+    from domain.services.contribution_decision import ClassDecision, spend_leftover
+
+    fi, cr = AssetClass.BR_FIXED_INCOME, AssetClass.CRYPTO
+    classes = [
+        ClassDecision(EQ, D("60"), [_decision("AAAA3", "30", "100", "60", "2", 80)], D("0"), True),
+        ClassDecision(fi, D("0"), [_decision("CDI", "2", "15", "0", "0", 50)], D("0"), False),
+        # Cripto acima do alvo: mesmo com lote barato, não pode receber o troco.
+        ClassDecision(cr, D("0"), [_decision("BTC", "1", "10", "0", "0", 99)], D("0"), False),
+    ]
+    gaps = {EQ: D("40"), fi: D("15"), cr: D("-5")}
+
+    result, leftover = spend_leftover(classes, gaps, D("50"))
+    by = {d.ticker.symbol: d for c in result for d in c.decisions}
+    # 1º: renda variável (falta 40 > 15) compra +1 cota de 30. Sobram 20; falta 10.
+    assert by["AAAA3"].quantity == D("3")
+    # 2º: renda fixa (falta 15 > 10) recebe 15 em CDI, fracionado (7,5 unidades a 2).
+    assert by["CDI"].amount == D("15")
+    assert by["CDI"].quantity == D("7.5")
+    assert by["CDI"].decision is Decision.BUY
+    # Sobra 5: menos que uma cota de AAAA3 e renda fixa já no alvo.
+    assert leftover == D("5")
+    assert by["BTC"].quantity == D("0")

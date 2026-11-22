@@ -34,7 +34,12 @@ from domain.repositories.market_data_repository import MarketDataRepository
 from domain.repositories.position_repository import PositionRepository
 from domain.services import metrics as m
 from domain.services.checklist_rules import is_discarded, reit_answers, stock_answers
-from domain.services.contribution_decision import Candidate, decide_class
+from domain.services.contribution_decision import (
+    Candidate,
+    ClassDecision,
+    decide_class,
+    spend_leftover,
+)
 from domain.services.performance import index_returns_on
 from domain.value_objects.asset_class import CDI, AssetClass
 from domain.value_objects.checklist import QUESTIONS, AnswerSource, ChecklistAnswer, ChecklistKind
@@ -174,18 +179,21 @@ class SuggestAssetContribution:
         for position in positions:
             by_class.setdefault(position.asset_class, []).append(position)
 
-        classes: list[ClassDecisionDTO] = []
+        decided: list[ClassDecision] = []
+        views: dict[Ticker, ChecklistView] = {}
+        closed: set[Ticker] = set()
         for asset_class in sorted(set(by_class) | set(budgets)):
             members = by_class.get(asset_class, [])
             if not members:
                 continue
             candidates: list[Candidate] = []
-            views: dict[Ticker, ChecklistView] = {}
             for position in members:
                 price = prices.get(position.ticker)
                 view = self._checklist_view(position, stocks, reits, manual, price)
                 if view is not None:
                     views[position.ticker] = view
+                if position.is_closed:
+                    closed.add(position.ticker)
                 candidates.append(
                     Candidate(
                         ticker=position.ticker,
@@ -199,38 +207,64 @@ class SuggestAssetContribution:
                         ),
                     )
                 )
-            decision = decide_class(
-                asset_class, candidates, budgets.get(asset_class, Decimal(0)), request.quant_weight
-            )
-            closed = {p.ticker for p in members if p.is_closed}
-            classes.append(
-                ClassDecisionDTO(
-                    asset_class=asset_class,
-                    budget=decision.budget,
-                    leftover=decision.leftover,
-                    uses_checklist=decision.uses_checklist,
-                    rows=[
-                        AssetDecisionRow(
-                            ticker=d.ticker.symbol,
-                            asset_class=asset_class,
-                            in_watchlist=d.ticker in closed,
-                            price=prices[d.ticker].amount if d.ticker in prices else None,
-                            current_value=d.current_value,
-                            quant_score=d.quant_score,
-                            checklist_score=d.checklist_score,
-                            final_score=d.final_score,
-                            ideal_weight_pct=d.ideal_weight * 100,
-                            target_value=d.target_value,
-                            quantity=d.quantity,
-                            amount=d.amount,
-                            decision=d.decision,
-                            reason=d.reason,
-                            checklist=views.get(d.ticker),
-                        )
-                        for d in decision.decisions
-                    ],
+            decided.append(
+                decide_class(
+                    asset_class,
+                    candidates,
+                    budgets.get(asset_class, Decimal(0)),
+                    request.quant_weight,
                 )
             )
+
+        # Troco das classes (arredondamento em lotes) vai para onde ainda falta: classe
+        # que já estava no alvo ou acima hoje nunca recebe. Nas demais, a falta é o maior
+        # entre (alvo depois do aporte - atual - comprado) e (parte do aporte da classe
+        # ainda não usada), para que o troco da própria classe sempre possa ser gasto.
+        spent = {c.asset_class: sum((d.amount for d in c.decisions), Decimal(0)) for c in decided}
+        gaps: dict[AssetClass, Decimal] = {}
+        for row in plan.rows:
+            used = spent.get(row.asset_class, Decimal(0))
+            if row.current_pct >= row.target_pct and row.current_value > 0:
+                gaps[row.asset_class] = Decimal(0)
+            else:
+                gaps[row.asset_class] = max(
+                    row.target_value - row.current_value - used, row.contribution - used
+                )
+        decided, _ = spend_leftover(decided, gaps, sum((c.leftover for c in decided), Decimal(0)))
+
+        classes = [
+            ClassDecisionDTO(
+                asset_class=cls.asset_class,
+                budget=cls.budget,
+                leftover=cls.budget - sum((d.amount for d in cls.decisions), Decimal(0)),
+                uses_checklist=cls.uses_checklist,
+                rows=[
+                    AssetDecisionRow(
+                        ticker=d.ticker.symbol,
+                        asset_class=cls.asset_class,
+                        in_watchlist=d.ticker in closed,
+                        price=d.price,
+                        current_value=d.current_value,
+                        quant_score=d.quant_score,
+                        checklist_score=d.checklist_score,
+                        final_score=d.final_score,
+                        ideal_weight_pct=d.ideal_weight * 100,
+                        target_value=d.target_value,
+                        quantity=d.quantity,
+                        amount=d.amount,
+                        decision=d.decision,
+                        reason=d.reason,
+                        checklist=views.get(d.ticker),
+                    )
+                    for d in sorted(
+                        cls.decisions,
+                        key=lambda d: (d.amount, d.final_score or -1.0),
+                        reverse=True,
+                    )
+                ],
+            )
+            for cls in decided
+        ]
 
         orders = [
             BuyOrder(
