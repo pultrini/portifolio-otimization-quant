@@ -52,6 +52,14 @@ class PositionsView(BaseModel):
     watchlist_classes: dict[str, AssetClass] = {}
 
 
+class ReclassificationRow(BaseModel):
+    """Posição que muda de classe (FII/REIT saindo da renda variável)."""
+
+    ticker: str
+    current: AssetClass
+    proposed: AssetClass
+
+
 class UpdatePositionRequest(BaseModel):
     user_id: str = Field(min_length=1)
     portfolio_id: str = Field(min_length=1)

@@ -121,8 +121,12 @@ def test_sugestao_por_ativo() -> None:
     result = use_case.execute(AssetContributionRequest(portfolio_id=pid, amount=Decimal("1000")))
 
     equity = next(c for c in result.classes if c.asset_class is AssetClass.BR_EQUITY)
-    rows = {r.ticker: r for r in equity.rows}
+    reits = next(c for c in result.classes if c.asset_class is AssetClass.BR_REAL_ESTATE)
+    rows = {r.ticker: r for c in (equity, reits) for r in c.rows}
     assert equity.uses_checklist
+    # FIIX11 entra na classe de FIIs (lista da CVM), com o checklist de fundos.
+    assert rows["FIIX11"].checklist is not None
+    assert rows["FIIX11"].checklist.kind is ChecklistKind.REIT
     # FII com P/VP > 1,5 é eliminado em qualquer hipótese.
     assert rows["FIIX11"].decision is Decision.DISCARDED
     assert "P/VP" in rows["FIIX11"].reason
@@ -205,6 +209,10 @@ def test_aportar_registra_operacoes() -> None:
 def test_tipo_de_checklist() -> None:
     assert checklist_kind(Ticker("PETR4"), AssetClass.BR_EQUITY, None) is ChecklistKind.STOCK
     assert checklist_kind(Ticker("MXRF11"), AssetClass.BR_EQUITY, None) is ChecklistKind.REIT
+    assert checklist_kind(Ticker("KLBN11"), AssetClass.BR_EQUITY, None) is ChecklistKind.STOCK
+    assert checklist_kind(Ticker("HGLG11"), AssetClass.BR_REAL_ESTATE, None) is ChecklistKind.REIT
+    assert checklist_kind(Ticker("O"), AssetClass.INTL_REAL_ESTATE, None) is ChecklistKind.REIT
+    assert checklist_kind(Ticker("AAPL"), AssetClass.INTL_EQUITY, None) is ChecklistKind.STOCK
     assert checklist_kind(Ticker("CDI"), AssetClass.BR_FIXED_INCOME, None) is None
     assert (
         checklist_kind(Ticker("KLBN11"), AssetClass.BR_EQUITY, ReitFundamentals("KLBN11"))

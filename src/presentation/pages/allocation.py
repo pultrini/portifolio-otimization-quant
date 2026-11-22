@@ -27,9 +27,11 @@ def _targets_form(ctx: PageContext) -> None:
     current = ctx.container.get_allocation_targets.execute(ctx.portfolio_id).targets
     with st.form("allocation_targets"):
         inputs: dict[AssetClass, float] = {}
-        cols = st.columns(len(AssetClass))
         # Um campo por classe, pré-preenchido com o alvo salvo (ou 0 se ainda não existe).
-        for col, asset_class in zip(cols, AssetClass, strict=True):
+        # Quatro por linha: com sete classes, uma linha só espremeria os rótulos.
+        classes = list(AssetClass)
+        cols = [c for _ in range(0, len(classes), 4) for c in st.columns(4)]
+        for col, asset_class in zip(cols, classes, strict=False):
             inputs[asset_class] = col.number_input(
                 f"{asset_class.label_pt} (%)",
                 min_value=0.0,
@@ -132,6 +134,18 @@ def _contribution_section(ctx: PageContext) -> None:
     if plan.total_before == 0 and amount == 0:
         st.info("Carteira sem valor de mercado. Importe posições e atualize os dados.")
         return
+
+    # Classe com posições e alvo 0% nunca recebe aporte: avisa (ex.: FIIs recém-movidos
+    # para a classe própria, antes de o perfil ter um alvo para ela).
+    without_target = [
+        r.asset_class.label_pt for r in plan.rows if r.current_value > 0 and r.target_pct == 0
+    ]
+    if without_target:
+        st.warning(
+            "Classes com posições e alvo 0%: "
+            + ", ".join(without_target)
+            + ". Elas não recebem aporte; ajuste o perfil se quiser investir nelas."
+        )
 
     cols = st.columns(2)
     cols[0].metric("Patrimônio atual", format_brl(plan.total_before))

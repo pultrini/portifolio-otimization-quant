@@ -35,7 +35,12 @@ from application.use_cases.optimization import (
     SuggestContribution,
 )
 from application.use_cases.portfolios import CreatePortfolio, GetAllocationTargets, ListPortfolios
-from application.use_cases.positions import DeletePosition, ListPositions, UpdatePosition
+from application.use_cases.positions import (
+    DeletePosition,
+    ListPositions,
+    ReclassifyRealEstate,
+    UpdatePosition,
+)
 from application.use_cases.save_allocation_targets import SaveAllocationTargets
 from application.use_cases.trades import ListTrades, RegisterTrade
 from domain.repositories.fundamentals_repository import (
@@ -77,6 +82,7 @@ class Container:
     import_positions: ImportPositions
     update_position: UpdatePosition
     delete_position: DeletePosition
+    reclassify_real_estate: ReclassifyRealEstate
     register_trade: RegisterTrade
     list_trades: ListTrades
     refresh_market_data: RefreshMarketData
@@ -117,7 +123,7 @@ def assemble(
     Separado de `build_container` para que os testes de interface usem o mesmo
     container com repositórios em memória.
     """
-    register_trade = RegisterTrade(positions, trades)
+    register_trade = RegisterTrade(positions, trades, fundamentals)
     suggest_contribution = SuggestContribution(portfolios, positions, market_data)
     return Container(
         list_portfolios=ListPortfolios(portfolios),
@@ -125,9 +131,10 @@ def assemble(
         get_allocation_targets=GetAllocationTargets(portfolios),
         save_allocation_targets=SaveAllocationTargets(portfolios),
         list_positions=ListPositions(positions, market_data),
-        import_positions=ImportPositions(positions, market_data, refresher, years),
+        import_positions=ImportPositions(positions, market_data, refresher, years, fundamentals),
         update_position=UpdatePosition(positions),
         delete_position=DeletePosition(positions),
+        reclassify_real_estate=ReclassifyRealEstate(positions, fundamentals),
         register_trade=register_trade,
         list_trades=ListTrades(trades),
         refresh_market_data=RefreshMarketData(refresher, positions, years),

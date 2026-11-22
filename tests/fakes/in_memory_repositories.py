@@ -154,6 +154,9 @@ class FakeFundamentalsRepository:
         self._stocks = stocks or {}
         self._reits = reits or {}
 
+    def listed_reits(self) -> frozenset[str]:
+        return frozenset(self._reits)
+
     def stock_fundamentals(self, tickers: Sequence[Ticker]) -> dict[Ticker, StockFundamentals]:
         return {t: self._stocks[t.symbol] for t in tickers if t.symbol in self._stocks}
 

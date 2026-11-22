@@ -54,6 +54,9 @@ def _class_summary(result: AssetContributionResult) -> None:
         )
         if row.contribution > 0:
             tail = f"recebe **{format_brl(row.contribution)}**"
+        elif result.plan.total_after == result.plan.total_before:
+            # Sem valor de aporte, "outras classes estão mais abaixo" seria enganoso.
+            tail = "acima do alvo" if row.current_pct > row.target_pct else "abaixo do alvo"
         elif row.current_pct > row.target_pct:
             tail = "não recebe: já está acima do alvo"
         else:

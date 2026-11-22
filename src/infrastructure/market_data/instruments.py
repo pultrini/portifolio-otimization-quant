@@ -15,8 +15,10 @@ from domain.value_objects.asset_class import (
     BITCOIN,
     CDI,
     IBOV,
+    IFIX,
     SP500,
     US_AGGREGATE_BOND,
+    US_REITS,
     US_TREASURY_3M,
 )
 
@@ -64,7 +66,16 @@ SGS_PTAX_SELL = "1"  # PTAX venda, R$ por US$
 
 # Tickers que o pipeline sempre baixa: benchmarks da tabela 5.1, taxas livres de risco
 # e o câmbio (via SGS, fora desta lista).
-REFERENCE_TICKERS: tuple[str, ...] = (IBOV, SP500, US_AGGREGATE_BOND, BITCOIN, CDI, US_TREASURY_3M)
+REFERENCE_TICKERS: tuple[str, ...] = (
+    IBOV,
+    SP500,
+    US_AGGREGATE_BOND,
+    BITCOIN,
+    CDI,
+    US_TREASURY_3M,
+    IFIX,
+    US_REITS,
+)
 
 _CRYPTO = {"BTC", "ETH", "SOL", "XRP", "ADA", "BNB", "DOGE"}
 _B3 = re.compile(r"^([A-Z]{4}\d{1,2})F?$")  # "F" do fracionário cai fora

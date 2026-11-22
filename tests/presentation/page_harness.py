@@ -54,6 +54,7 @@ def _market() -> FakeMarketDataRepository:
             "CCCC11": walk(100.0, 0.0001, 0.006),
             "BTC": walk(350000.0, 0.001, 0.03),
             "^BVSP": walk(130000.0, 0.0003, 0.011),
+            "XFIX11": walk(10.0, 0.0002, 0.005),
             "CDI": [1.0005**i for i in range(N)],
             "TBILL3M": [1.00016**i for i in range(N)],
         },
@@ -90,7 +91,7 @@ def build_container() -> tuple[Container, str]:
     portfolios.save_allocation_targets(
         "user-1",
         portfolio.id,
-        {"BR_EQUITY": 60.0, "BR_FIXED_INCOME": 30.0, "CRYPTO": 10.0},
+        {"BR_EQUITY": 50.0, "BR_REAL_ESTATE": 10.0, "BR_FIXED_INCOME": 30.0, "CRYPTO": 10.0},
     )
     # Operações ao preço de mercado do dia (índice `day` na série sintética).
     for side, qty, day in (

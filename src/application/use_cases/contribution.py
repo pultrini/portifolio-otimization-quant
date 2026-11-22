@@ -35,6 +35,7 @@ from domain.repositories.fundamentals_repository import (
 from domain.repositories.market_data_repository import MarketDataRepository
 from domain.repositories.position_repository import PositionRepository
 from domain.services import metrics as m
+from domain.services.asset_classification import is_brazilian_reit
 from domain.services.checklist_rules import is_discarded, reit_answers, stock_answers
 from domain.services.contribution_decision import (
     Candidate,
@@ -56,6 +57,7 @@ from domain.value_objects.strategy_type import TradeSide
 from domain.value_objects.ticker import Ticker
 
 _EQUITY = {AssetClass.BR_EQUITY, AssetClass.INTL_EQUITY}
+_REAL_ESTATE = {AssetClass.BR_REAL_ESTATE, AssetClass.INTL_REAL_ESTATE}
 
 
 def checklist_kind(
@@ -63,17 +65,19 @@ def checklist_kind(
 ) -> ChecklistKind | None:
     """Qual checklist se aplica ao ativo.
 
-    FII quando há informe na CVM. Sem fundamentos baixados ainda, um ticker "11" de
-    renda variável é tratado como FII (as units, como KLBN11, viram ação depois que
-    os fundamentos forem atualizados). Renda fixa e cripto não têm checklist.
+    FII (com informe na CVM ou na classe de FIIs) e REIT usam as perguntas de fundos
+    imobiliários; ações (Brasil e exterior) usam as de ações. Renda fixa e cripto não
+    têm checklist. As respostas automáticas de P/VP, dividendos e yield do setor só
+    existem para FIIs (dados da CVM); para REITs as perguntas ficam para o usuário.
     """
-    if reit is not None:
+    if reit is not None or asset_class in _REAL_ESTATE:
         return ChecklistKind.REIT
-    if asset_class not in _EQUITY:
-        return None
-    if asset_class is AssetClass.BR_EQUITY and ticker.symbol.endswith("11"):
+    # FII que ainda está em renda variável (carteira de antes das classes imobiliárias).
+    if asset_class is AssetClass.BR_EQUITY and is_brazilian_reit(ticker):
         return ChecklistKind.REIT
-    return ChecklistKind.STOCK
+    if asset_class in _EQUITY:
+        return ChecklistKind.STOCK
+    return None
 
 
 def build_checklist(
