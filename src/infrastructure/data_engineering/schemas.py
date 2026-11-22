@@ -59,7 +59,25 @@ SILVER_RATES = pl.Schema(
     {"date": pl.Date, "series": pl.String, "value": pl.Float64, "source": pl.String}
 )
 
+# Cotações do Tesouro Direto com taxas (frações: 0,0758 = 7,58% a.a.). Um ticker por
+# tipo e ano de vencimento, como em SILVER_PRICES.
+SILVER_TREASURY = pl.Schema(
+    {
+        "date": pl.Date,
+        "ticker": pl.String,
+        "maturity": pl.Date,
+        "buy_rate": pl.Float64,
+        "sell_rate": pl.Float64,
+        "pu_buy": pl.Float64,
+        "pu_sell": pl.Float64,
+        "pu_base": pl.Float64,
+    }
+)
+
 # ------------------------------------------------------------- Gold (dado analítico)
+# Mesmo formato da Silver: a marcação a mercado precisa da cotação do dia (último dia)
+# e da cotação de datas passadas (estimativa da taxa contratada).
+GOLD_TREASURY = SILVER_TREASURY
 GOLD_FX = pl.Schema({"date": pl.Date, "usd_brl": pl.Float64})
 
 GOLD_PRICES = pl.Schema(

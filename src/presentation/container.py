@@ -27,6 +27,7 @@ from application.use_cases.goals import (
     UndoDeposit,
 )
 from application.use_cases.import_positions import ImportPositions
+from application.use_cases.mark_to_market import GetMarkToMarket, SaveBondTerms
 from application.use_cases.market_data import RefreshMarketData
 from application.use_cases.metrics import CalculateMetrics
 from application.use_cases.optimization import (
@@ -48,7 +49,12 @@ from domain.repositories.fundamentals_repository import (
     FundamentalsRefresher,
     FundamentalsRepository,
 )
-from domain.repositories.market_data_repository import MarketDataRefresher, MarketDataRepository
+from domain.repositories.market_data_repository import (
+    BondTermsRepository,
+    MarketDataRefresher,
+    MarketDataRepository,
+    TreasuryRepository,
+)
 from domain.repositories.portfolio_repository import PortfolioRepository
 from domain.repositories.position_repository import PositionRepository
 from domain.repositories.savings_goal_repository import SavingsGoalRepository
@@ -59,6 +65,8 @@ from infrastructure.data_engineering.pipeline import build_default_pipeline
 from infrastructure.market_data.fundamentals_clients import CvmClient, YahooFundamentalsClient
 from infrastructure.persistence.parquet_fundamentals_repository import ParquetFundamentalsRepository
 from infrastructure.persistence.parquet_market_data_repository import ParquetMarketDataRepository
+from infrastructure.persistence.parquet_treasury_repository import ParquetTreasuryRepository
+from infrastructure.persistence.supabase_bond_terms_repository import SupabaseBondTermsRepository
 from infrastructure.persistence.supabase_checklist_repository import SupabaseChecklistRepository
 from infrastructure.persistence.supabase_portfolio_repository import SupabasePortfolioRepository
 from infrastructure.persistence.supabase_position_repository import (
@@ -104,6 +112,8 @@ class Container:
     goal_dashboard: GetGoalDashboard
     register_deposit: RegisterDeposit
     undo_deposit: UndoDeposit
+    mark_to_market: GetMarkToMarket
+    save_bond_terms: SaveBondTerms
 
 
 def assemble(
@@ -117,6 +127,8 @@ def assemble(
     fundamentals_refresher: FundamentalsRefresher,
     checklist: ChecklistRepository,
     goals: SavingsGoalRepository,
+    treasury: TreasuryRepository,
+    bond_terms: BondTermsRepository,
 ) -> Container:
     """Liga os use cases a quaisquer implementações dos contratos do domínio.
 
@@ -158,6 +170,8 @@ def assemble(
         goal_dashboard=GetGoalDashboard(goals),
         register_deposit=RegisterDeposit(goals),
         undo_deposit=UndoDeposit(goals),
+        mark_to_market=GetMarkToMarket(positions, treasury, bond_terms),
+        save_bond_terms=SaveBondTerms(positions, treasury, bond_terms),
     )
 
 
@@ -176,4 +190,6 @@ def build_container(client: Client, settings: Settings) -> Container:
         ),
         checklist=SupabaseChecklistRepository(client),
         goals=SupabaseSavingsGoalRepository(client),
+        treasury=ParquetTreasuryRepository(settings.data_dir),
+        bond_terms=SupabaseBondTermsRepository(client),
     )
