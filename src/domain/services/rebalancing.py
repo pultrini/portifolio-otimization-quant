@@ -78,6 +78,41 @@ def _to_cents[K](amounts: dict[K, Decimal], total: Decimal) -> dict[K, Decimal]:
     return rounded
 
 
+def eligible_classes(
+    values: Mapping[AssetClass, Decimal], profile: AllocationProfile
+) -> set[AssetClass]:
+    """Classes que podem receber aporte: percentual atual abaixo do alvo.
+
+    Carteira vazia: todas as classes com alvo maior que zero.
+    """
+    total = sum(values.values(), ZERO)
+    if total <= 0:
+        return {c for c, pct in profile.targets.items() if pct > 0}
+    return {
+        c
+        for c in set(values) | set(profile.targets)
+        if values.get(c, ZERO) / total * HUNDRED < profile.target_for(c)
+    }
+
+
+def _underweight_fill(
+    values: Mapping[AssetClass, Decimal],
+    profile: AllocationProfile,
+    deficits: Mapping[AssetClass, Decimal],
+    budget: Decimal,
+) -> dict[AssetClass, Decimal]:
+    """Enchimento de nível só entre as classes abaixo do alvo; excedente pelo alvo %."""
+    eligible = eligible_classes(values, profile)
+    buys = water_fill({c: d for c, d in deficits.items() if c in eligible}, budget)
+    excess = budget - sum(buys.values(), ZERO)
+    weights = {c: profile.target_for(c) for c in eligible if profile.target_for(c) > 0}
+    total_weight = sum(weights.values(), ZERO)
+    if excess > 0 and total_weight > 0:
+        for c, weight in weights.items():
+            buys[c] = buys.get(c, ZERO) + excess * weight / total_weight
+    return buys
+
+
 def suggest_contribution(
     current: Mapping[AssetClass, Money],
     profile: AllocationProfile,
@@ -89,8 +124,11 @@ def suggest_contribution(
     Patrimônio após o aporte: T = Σ atual + aporte. Valor alvo da classe: T x alvo%.
     Déficit: max(0, alvo - atual).
 
-    - Sem vendas (padrão, aportes antes de vendas): o aporte é distribuído por
-      enchimento de nível sobre os déficits (`water_fill`).
+    - Sem vendas (padrão, aportes antes de vendas): só recebem classes cujo
+      percentual ATUAL está abaixo do alvo (quem já está no alvo ou acima não
+      recebe, mesmo que o alvo em reais cresça com o aporte). Entre elas, o aporte
+      é distribuído por enchimento de nível sobre os déficits (`water_fill`); o que
+      sobrar depois de cobrir os déficits é dividido entre elas na proporção do alvo.
     - Com vendas: compra todo o déficit e vende todo o excesso; a carteira termina
       exatamente no alvo (compras - vendas = aporte).
 
@@ -112,7 +150,7 @@ def suggest_contribution(
         sales = _to_cents(sales, sum(sales.values(), ZERO))
         buys = _to_cents(buys, budget + sum(sales.values(), ZERO))
     else:
-        buys = _to_cents(water_fill(deficits, budget), budget)
+        buys = _to_cents(_underweight_fill(values, profile, deficits, budget), budget)
         sales = {}
 
     return RebalancePlan(

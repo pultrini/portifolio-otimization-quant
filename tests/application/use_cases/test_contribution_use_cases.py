@@ -205,3 +205,32 @@ def test_tipo_de_checklist() -> None:
         checklist_kind(Ticker("KLBN11"), AssetClass.BR_EQUITY, ReitFundamentals("KLBN11"))
         is ChecklistKind.REIT
     )
+
+
+def test_classe_acima_do_alvo_nao_recebe_e_aporte_vai_ate_o_maximo() -> None:
+    # Exemplo do usuário: perfil com 40% em ações brasileiras, mas a carteira já tem
+    # bem mais que isso. O aporte deve ir inteiro para onde falta percentual.
+    portfolios = InMemoryPortfolioRepository()
+    pid = portfolios.create_portfolio("u", "Principal").id
+    positions = InMemoryPositionRepository()
+    ImportPositions(positions, MARKET).execute(
+        ImportPositionsRequest(user_id="u", portfolio_id=pid, text="AAAA3 20 18\nCDI R$ 100")
+    )
+    portfolios.save_allocation_targets("u", pid, {"BR_EQUITY": 40.0, "BR_FIXED_INCOME": 60.0})
+    use_case = SuggestAssetContribution(
+        SuggestContribution(portfolios, positions, MARKET),
+        positions,
+        MARKET,
+        FakeFundamentalsRepository(stocks={"AAAA3": GOOD_STOCK}),
+        InMemoryChecklistRepository(),
+        today=lambda: TODAY,
+    )
+    result = use_case.execute(AssetContributionRequest(portfolio_id=pid, amount=Decimal("500")))
+
+    equity = next(r for r in result.plan.rows if r.asset_class is AssetClass.BR_EQUITY)
+    assert equity.current_pct > 40  # já acima do alvo
+    assert equity.contribution == 0
+    assert all(o.asset_class is not AssetClass.BR_EQUITY for o in result.orders)
+    # Tudo em renda fixa (CDI é fracionado): o aporte é usado até o último centavo.
+    assert [o.ticker for o in result.orders] == ["CDI"]
+    assert result.leftover < Decimal("0.01")
