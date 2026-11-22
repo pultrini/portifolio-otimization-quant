@@ -85,6 +85,34 @@ def test_pagina_carteira() -> None:
     assert any(m.value == "**DDDD3**" for m in at.markdown)
 
 
+def test_questionario_e_pesos_dentro_de_editar_posicao() -> None:
+    at = _run(_carteira)
+    assert [t.label for t in at.tabs] == ["Posição", "📝 Questionário de importância"]
+    # Ativo da carteira: perguntas na aba, dentro de uma caixa com rolagem.
+    at.selectbox(key="edit_ticker").set_value("AAAA3").run()
+    questions = [r for r in at.radio if "portfolio_chk_AAAA3" in str(r.key)]
+    assert len(questions) == 11
+    questions[0].set_value("Sim")
+    questions[1].set_value("Não")
+    next(b for b in at.button if b.label == "Salvar respostas").click()
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Nota do checklist **9,09%** · 1 Sim, 1 Não" in m.value for m in at.markdown)
+
+    # Postura conservadora: um Não anula dois Sim -> (1 - 2) / 11 < 0 -> nota 0.
+    at.radio(key="portfolio_weights_preset").set_value("Conservador: um Não anula dois Sim").run()
+    next(b for b in at.button if b.label == "Salvar pesos").click()
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Nota do checklist **0,00%**" in m.value for m in at.markdown)
+
+    # Ativo da lista de desejos também tem questionário; renda fixa não tem.
+    at.selectbox(key="edit_ticker").set_value("DDDD3").run()
+    assert any("portfolio_chk_DDDD3" in str(r.key) for r in at.radio)
+    at.selectbox(key="edit_ticker").set_value("CDI").run()
+    assert any("não tem questionário" in i.value for i in at.info)
+
+
 def test_pagina_operacoes() -> None:
     at = _run(_operacoes)
     assert at.header[0].value == "Operações"
@@ -117,11 +145,12 @@ def test_aportar_registra_e_confirma() -> None:
     # Resumo por classe com atual -> alvo.
     assert any("atual **" in t and "alvo **" in t for t in texts)
     # Sem perguntas na página: elas abrem na janela do questionário.
-    assert not at.radio
+    # (o único radio fora da janela é a postura, dentro do popover de pesos)
+    assert all(r.key == "allocation_weights_preset" for r in at.radio)
     questionnaire = next(b for b in at.button if b.label == "📝 Questionário")
     questionnaire.click().run()
     assert not at.exception, [e.value for e in at.exception]
-    assert len(at.radio) >= 6  # perguntas do ativo, dentro da janela
+    assert sum(1 for r in at.radio if "_chk_" in str(r.key)) >= 6  # perguntas, na janela
 
     aportar = next(b for b in at.button if b.label == "Aportar")
     aportar.click().run()
@@ -144,9 +173,32 @@ def test_pagina_metricas() -> None:
 def test_pagina_otimizacao() -> None:
     at = _run(_otimizacao)
     assert at.header[0].value == "Otimização"
-    assert len(at.get("plotly_chart")) == 2  # fronteira e correlação
+    # Aba 1: fronteira e correlação. Aba 2 (simulação): pesos e evolução.
+    assert len(at.get("plotly_chart")) == 4
     assert any("Fora da otimização: CDI" in c.value for c in at.caption)
     assert not at.error
+    assert [t.label for t in at.tabs] == [
+        "Fronteira eficiente",
+        "🧪 Simulando melhor carteira quant",
+    ]
+    assert any(m.label == "Sharpe simulado" for m in at.metric)
+    texts = [m.value for m in at.markdown]
+    # Lista de desejos entra na simulação, e o perfil alvo define o peso das classes.
+    assert any(t.startswith("**DDDD3**") and "desejado" in t for t in texts)
+    assert any("simulada **60,00%**" in t and "alvo 60,00%" in t for t in texts)
+
+
+def test_simulacao_sem_perfil_alvo_e_com_aporte() -> None:
+    at = _run(_otimizacao)
+    form = at.tabs[1]
+    next(t for t in form.toggle if t.label == "Respeitar alocação alvo").set_value(False)
+    next(n for n in form.number_input if n.label == "Aporte novo (R$)").set_value(500.0)
+    next(b for b in form.button if b.label == "Simular").click()
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert not at.error
+    expander = next(e for e in at.expander if e.label.startswith("Fora da simulação"))
+    assert any("CDI" in m.value and "renda fixa" in m.value for m in expander.markdown)
 
 
 @pytest.fixture

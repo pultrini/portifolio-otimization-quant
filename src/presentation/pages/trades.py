@@ -91,4 +91,5 @@ def render(ctx: PageContext) -> None:
         ],
         hide_index=True,
         width="stretch",
+        height=min(360, 38 + 35 * len(rows)),  # rola por dentro em vez de crescer
     )

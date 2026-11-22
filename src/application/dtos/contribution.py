@@ -27,13 +27,23 @@ class ChecklistView(BaseModel):
     kind: ChecklistKind
     questions: list[ChecklistQuestionRow]
     yes: int
+    no: int
     answered: int
     total: int
+    # Nota de 0 a 1 com os pesos de Sim/Não do usuário (ChecklistWeights.score).
+    score: float
 
-    @property
-    def score(self) -> float:
-        """Fração de "Sim" sobre o total de perguntas (sem resposta conta como não)."""
-        return self.yes / self.total if self.total else 0.0
+
+class ChecklistWeightsDTO(BaseModel):
+    """Postura do usuário no checklist: peso de cada Sim e de cada Não."""
+
+    yes: float = Field(default=1.0, gt=0, le=3)
+    no: float = Field(default=0.0, ge=0, le=5)
+
+
+class SaveChecklistWeightsRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+    weights: ChecklistWeightsDTO
 
 
 class SaveChecklistRequest(BaseModel):

@@ -74,3 +74,20 @@ class TestAssetClass:
     def test_anualizacao(self) -> None:
         assert AssetClass.CRYPTO.periods_per_year == 365
         assert AssetClass.BR_EQUITY.periods_per_year == 252
+
+
+def test_pesos_do_checklist() -> None:
+    from domain.value_objects.checklist import ChecklistWeights
+
+    # 11 perguntas, 7 Sim, 3 Não, 1 sem resposta.
+    assert ChecklistWeights().score(7, 3, 11) == pytest.approx(7 / 11)
+    assert ChecklistWeights(1, 2).score(7, 3, 11) == pytest.approx(1 / 11)
+    # Só a razão importa: Sim 0,5 e Não 1 é o mesmo que Sim 1 e Não 2.
+    assert ChecklistWeights(0.5, 1).score(7, 3, 11) == pytest.approx(1 / 11)
+    assert ChecklistWeights(1, 2).penalty_ratio == 2
+    # Nunca negativa; checklist vazio vale 0.
+    assert ChecklistWeights(1, 3).score(7, 3, 11) == 0.0
+    assert ChecklistWeights().score(0, 0, 0) == 0.0
+    for yes, no in ((0, 1), (4, 0), (1, -1), (1, 6)):
+        with pytest.raises(DomainError):
+            ChecklistWeights(yes, no)

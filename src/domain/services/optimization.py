@@ -6,7 +6,7 @@ Entradas e saídas em numpy; otimização numérica com scipy. Sem I/O.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -242,3 +242,100 @@ def risk_parity(universe: AssetUniverse, risk_free: float) -> PortfolioPoint:
     else:
         raise DomainError("Risk Parity não convergiu.")
     return evaluate(universe, y / y.sum(), risk_free)
+
+
+def optimize_constrained(
+    universe: AssetUniverse,
+    risk_free: float,
+    objective: str = "max_sharpe",
+    max_weight: float = 1.0,
+    groups: Sequence[str] | None = None,
+    group_targets: Mapping[str, float] | None = None,
+) -> PortfolioPoint:
+    """Melhor carteira com limite por ativo e, opcionalmente, peso fixo por grupo (classe).
+
+    Problema (sem venda a descoberto):
+        max (w·μ − rf) / sqrt(wᵀ Σ w)      (objective = "max_sharpe")
+        ou min wᵀ Σ w                      (objective = "min_variance")
+        sujeito a  Σ w = 1,  0 <= w_i <= teto_i
+                   Σ_{i ∈ g} w_i = alvo_g  para cada grupo g (quando há grupos)
+
+    O teto por ativo evita a solução de canto típica de Markowitz (tudo em um ou dois
+    ativos, muito sensível ao erro de estimação de μ). Quando o teto torna o problema
+    inviável (ex.: 3 ativos com teto 25% não somam 100%, ou uma classe com alvo 40% e
+    um só ativo), ele é relaxado para o mínimo viável: alvo_g / n_g dentro do grupo,
+    ou 1 / n sem grupos.
+
+    Com grupos, a decisão entre classes é do usuário (perfil alvo) e a otimização só
+    escolhe a composição dentro de cada classe, levando em conta as correlações entre
+    todos os ativos. Assim CDI e Tesouro podem entrar sem dominar a carteira.
+
+    Raises:
+        DomainError: objetivo desconhecido, grupos inconsistentes ou não convergência.
+    """
+    if objective not in ("max_sharpe", "min_variance"):
+        raise DomainError(f"Objetivo de otimização desconhecido: {objective}.")
+    if not 0 < max_weight <= 1:
+        raise DomainError("O peso máximo por ativo deve estar entre 0 e 100%.")
+    n = len(universe.tickers)
+    constraints = [_budget(n)]
+    if groups is not None:
+        if len(groups) != n or group_targets is None:
+            raise DomainError("Cada ativo precisa de um grupo, e cada grupo de um alvo.")
+        names = sorted(set(groups))
+        missing = [g for g in names if g not in group_targets]
+        if missing:
+            raise DomainError(f"Grupos sem alvo: {', '.join(missing)}.")
+        targets = np.array([group_targets[g] for g in names], dtype=np.float64)
+        if abs(float(targets.sum()) - 1.0) > 1e-6:
+            raise DomainError("Os alvos dos grupos com ativos precisam somar 100%.")
+        membership = np.array([[1.0 if groups[i] == g else 0.0 for i in range(n)] for g in names])
+        counts = membership.sum(axis=1)
+        # As somas por grupo já implicam Σ w = 1; manter as duas deixa as restrições
+        # linearmente dependentes e o SLSQP falha ("Singular matrix C").
+        constraints = [LinearConstraint(membership, targets, targets)]
+        caps = np.array(
+            [
+                min(1.0, max(max_weight, group_targets[groups[i]] / counts[names.index(groups[i])]))
+                for i in range(n)
+            ]
+        )
+        # Ponto inicial viável: alvo do grupo dividido igualmente entre seus ativos.
+        start = np.array(
+            [group_targets[groups[i]] / counts[names.index(groups[i])] for i in range(n)]
+        )
+    else:
+        caps = np.full(n, min(1.0, max(max_weight, 1.0 / n)))
+        start = np.full(n, 1.0 / n)
+
+    covariance, mu = universe.covariance, universe.expected_returns
+
+    def variance(w: FloatArray) -> float:
+        return float(w @ covariance @ w)
+
+    def negative_sharpe(w: FloatArray) -> float:
+        return -(float(w @ mu) - risk_free) / math.sqrt(max(variance(w), 1e-18))
+
+    result = minimize(
+        negative_sharpe if objective == "max_sharpe" else variance,
+        start,
+        method="SLSQP",
+        bounds=Bounds(np.zeros(n), caps),
+        constraints=constraints,
+        options={"maxiter": 1000, "ftol": 1e-12},
+    )
+    if not result.success:
+        raise DomainError(f"Otimização não convergiu: {result.message}")
+    weights = np.clip(np.asarray(result.x, dtype=np.float64), 0.0, None)
+    return evaluate(universe, weights / weights.sum(), risk_free)
+
+
+def growth_curve(returns: FloatArray, weights: FloatArray) -> FloatArray:
+    """Patrimônio de 1,0 aplicado com pesos constantes (rebalanceado a cada período).
+
+    Fórmula: V_0 = 1; V_t = V_{t-1} x (1 + w · r_t). É uma simulação dentro da própria
+    amostra usada para estimar os pesos: mostra como a composição teria se comportado,
+    não como vai se comportar.
+    """
+    curve: FloatArray = np.concatenate(([1.0], np.cumprod(1.0 + returns @ weights)))
+    return curve

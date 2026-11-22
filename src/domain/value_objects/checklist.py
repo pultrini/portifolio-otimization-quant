@@ -1,6 +1,7 @@
 """Perguntas qualitativas (checklist) usadas na decisão de aporte.
 
-Cada "Sim" vale um ponto. A nota do checklist é a fração de respostas "Sim".
+Por padrão cada "Sim" vale um ponto e "Não" vale zero: a nota é a fração de "Sim".
+O usuário pode ser mais conservador dando peso negativo ao "Não" (ver ChecklistWeights).
 As perguntas são as definidas pelo usuário; o texto fica aqui para que regra e
 interface usem exatamente a mesma definição.
 """
@@ -9,6 +10,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+
+from domain.exceptions import DomainError
+
+MAX_YES_WEIGHT = 3.0
+MAX_NO_WEIGHT = 5.0
 
 
 class ChecklistKind(StrEnum):
@@ -104,3 +110,42 @@ class ChecklistAnswer:
     value: bool | None
     source: AnswerSource | None = None
     evidence: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ChecklistWeights:
+    """Quanto vale cada resposta na nota do checklist (postura do usuário).
+
+    Fórmula:
+        nota = max(0, (Sim x peso_sim − Não x peso_não) / (total x peso_sim))
+
+    O denominador é a nota máxima possível (tudo Sim), então a nota fica entre 0 e 1.
+    "Sem resposta" vale 0 nos dois casos. Com o padrão (peso_sim 1, peso_não 0), a nota
+    é a fração de "Sim". Com peso_não > 0, cada "Não" desconta pontos: um investidor
+    conservador pune os pontos fracos mais do que premia os fortes. Só a razão
+    peso_não / peso_sim muda a nota (Sim 0,5 e Não 1 é o mesmo que Sim 1 e Não 2).
+
+    Exemplo (11 perguntas, 7 Sim, 3 Não, 1 sem resposta):
+        padrão (1; 0):        7 / 11            = 63,6%
+        conservador (1; 2):   (7 − 6) / 11      = 9,1%
+    """
+
+    yes: float = 1.0
+    no: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not 0 < self.yes <= MAX_YES_WEIGHT:
+            raise DomainError(f"Peso do Sim deve estar entre 0 (exclusive) e {MAX_YES_WEIGHT:g}.")
+        if not 0 <= self.no <= MAX_NO_WEIGHT:
+            raise DomainError(f"Peso do Não deve estar entre 0 e {MAX_NO_WEIGHT:g}.")
+
+    @property
+    def penalty_ratio(self) -> float:
+        """Quantos "Sim" um "Não" anula."""
+        return self.no / self.yes
+
+    def score(self, yes: int, no: int, total: int) -> float:
+        """Nota de 0 a 1; checklist sem perguntas vale 0."""
+        if total <= 0:
+            return 0.0
+        return max(0.0, (yes * self.yes - no * self.no) / (total * self.yes))

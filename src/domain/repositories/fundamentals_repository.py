@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from domain.entities.fundamentals import ReitFundamentals, StockFundamentals
+from domain.value_objects.checklist import ChecklistWeights
 from domain.value_objects.ticker import Ticker
 
 
@@ -31,3 +32,9 @@ class ChecklistRepository(Protocol):
     def save_answers(self, user_id: str, ticker: Ticker, answers: dict[str, bool | None]) -> None:
         """Grava as respostas; None remove a resposta manual (volta a valer a automática)."""
         ...
+
+    def weights(self) -> ChecklistWeights:
+        """Pesos de Sim/Não do usuário da sessão; o padrão quando ele nunca escolheu."""
+        ...
+
+    def save_weights(self, user_id: str, weights: ChecklistWeights) -> None: ...

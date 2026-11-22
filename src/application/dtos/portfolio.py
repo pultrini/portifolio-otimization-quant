@@ -48,6 +48,8 @@ class PositionsView(BaseModel):
     missing_prices: list[str]
     # Ativos com 0 cotas: desejados, ainda não comprados. Concorrem nas sugestões de aporte.
     watchlist: list[str] = []
+    # Classe de cada ativo desejado (para abrir o questionário certo).
+    watchlist_classes: dict[str, AssetClass] = {}
 
 
 class UpdatePositionRequest(BaseModel):

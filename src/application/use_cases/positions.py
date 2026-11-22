@@ -79,6 +79,9 @@ class ListPositions:
             market_value_by_class=by_class,
             missing_prices=missing,
             watchlist=watchlist,
+            watchlist_classes={
+                p.ticker.symbol: p.asset_class for p in all_positions if p.is_closed
+            },
         )
 
 
