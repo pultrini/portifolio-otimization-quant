@@ -13,10 +13,12 @@ from application.dtos.contribution import (
     BuyOrder,
     ChecklistQuestionRow,
     ChecklistView,
+    ChecklistWeightsDTO,
     ClassDecisionDTO,
     ExecuteContributionRequest,
     ExecuteContributionResult,
     SaveChecklistRequest,
+    SaveChecklistWeightsRequest,
 )
 from application.dtos.optimization import ContributionRequest
 from application.dtos.portfolio import RegisterTradeRequest
@@ -42,7 +44,13 @@ from domain.services.contribution_decision import (
 )
 from domain.services.performance import index_returns_on
 from domain.value_objects.asset_class import CDI, AssetClass
-from domain.value_objects.checklist import QUESTIONS, AnswerSource, ChecklistAnswer, ChecklistKind
+from domain.value_objects.checklist import (
+    QUESTIONS,
+    AnswerSource,
+    ChecklistAnswer,
+    ChecklistKind,
+    ChecklistWeights,
+)
 from domain.value_objects.money import Money
 from domain.value_objects.strategy_type import TradeSide
 from domain.value_objects.ticker import Ticker
@@ -73,8 +81,9 @@ def build_checklist(
     kind: ChecklistKind,
     auto: dict[str, ChecklistAnswer],
     manual: dict[str, bool | None],
+    weights: ChecklistWeights | None = None,
 ) -> ChecklistView:
-    """Junta respostas automáticas e manuais; a manual prevalece."""
+    """Junta respostas automáticas e manuais (a manual prevalece) e calcula a nota."""
     rows: list[ChecklistQuestionRow] = []
     for question in QUESTIONS[kind]:
         automatic = auto.get(question.key)
@@ -97,13 +106,17 @@ def build_checklist(
                 source=source,
             )
         )
+    yes = sum(1 for r in rows if r.answer is True)
+    no = sum(1 for r in rows if r.answer is False)
     return ChecklistView(
         ticker=ticker.symbol,
         kind=kind,
         questions=rows,
-        yes=sum(1 for r in rows if r.answer is True),
-        answered=sum(1 for r in rows if r.answer is not None),
+        yes=yes,
+        no=no,
+        answered=yes + no,
         total=len(rows),
+        score=(weights or ChecklistWeights()).score(yes, no, len(rows)),
     )
 
 
@@ -119,6 +132,28 @@ class SaveChecklist:
         if unknown:
             raise DomainError(f"Perguntas inválidas: {', '.join(sorted(unknown))}.")
         self._checklist.save_answers(request.user_id, Ticker.parse(request.ticker), request.answers)
+
+
+class GetChecklistWeights:
+    """Pesos de Sim/Não salvos pelo usuário (padrão 1 e 0)."""
+
+    def __init__(self, checklist: ChecklistRepository) -> None:
+        self._checklist = checklist
+
+    def execute(self) -> ChecklistWeightsDTO:
+        weights = self._checklist.weights()
+        return ChecklistWeightsDTO(yes=weights.yes, no=weights.no)
+
+
+class SaveChecklistWeights:
+    """Grava a postura do usuário; a validação dos limites é do domínio."""
+
+    def __init__(self, checklist: ChecklistRepository) -> None:
+        self._checklist = checklist
+
+    def execute(self, request: SaveChecklistWeightsRequest) -> None:
+        weights = ChecklistWeights(yes=request.weights.yes, no=request.weights.no)
+        self._checklist.save_weights(request.user_id, weights)
 
 
 class RefreshFundamentals:
@@ -172,6 +207,7 @@ class SuggestAssetContribution:
         stocks = self._fundamentals.stock_fundamentals(tickers)
         reits = self._fundamentals.reit_fundamentals(tickers)
         manual = self._checklist.answers(tickers)
+        weights = self._checklist.weights()
         start = self._today() - timedelta(days=365 * request.lookback_years)
 
         budgets = {row.asset_class: row.contribution for row in plan.rows}
@@ -189,7 +225,7 @@ class SuggestAssetContribution:
             candidates: list[Candidate] = []
             for position in members:
                 price = prices.get(position.ticker)
-                view = self._checklist_view(position, stocks, reits, manual, price)
+                view = self._checklist_view(position, stocks, reits, manual, price, weights)
                 if view is not None:
                     views[position.ticker] = view
                 if position.is_closed:
@@ -287,6 +323,7 @@ class SuggestAssetContribution:
         reits: dict[Ticker, ReitFundamentals],
         manual: dict[Ticker, dict[str, bool | None]],
         price: Money | None,
+        weights: ChecklistWeights,
     ) -> ChecklistView | None:
         reit = reits.get(position.ticker)
         kind = checklist_kind(position.ticker, position.asset_class, reit)
@@ -297,7 +334,9 @@ class SuggestAssetContribution:
         else:
             stock = stocks.get(position.ticker)
             auto = stock_answers(stock, self._today()) if stock else {}
-        return build_checklist(position.ticker, kind, auto, manual.get(position.ticker, {}))
+        return build_checklist(
+            position.ticker, kind, auto, manual.get(position.ticker, {}), weights
+        )
 
     def _risk_adjusted(
         self, ticker: Ticker, asset_class: AssetClass, start: date
@@ -348,7 +387,7 @@ class GetChecklist:
             stock = self._fundamentals.stock_fundamentals([symbol]).get(symbol)
             auto = stock_answers(stock, self._today()) if stock else {}
         manual = self._checklist.answers([symbol]).get(symbol, {})
-        return build_checklist(symbol, kind, auto, manual)
+        return build_checklist(symbol, kind, auto, manual, self._checklist.weights())
 
 
 class ExecuteContribution:

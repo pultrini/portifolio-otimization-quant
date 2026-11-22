@@ -6,6 +6,7 @@ import streamlit as st
 
 from application.dtos.portfolio import (
     ImportPositionsRequest,
+    PositionRow,
     PositionsView,
     UpdatePositionRequest,
 )
@@ -18,6 +19,7 @@ from presentation.components.formatting import (
     format_pct,
     format_quantity,
 )
+from presentation.components.questionnaire import render_form, weights_editor
 from presentation.components.session import PageContext
 
 IMPORT_EXAMPLE = """# TICKER QUANTIDADE PRECO_MEDIO
@@ -27,6 +29,9 @@ CDI R$ 652,46
 BTC R$ 158,00 175,20
 # Lista de desejos (ativos que quer ter): quantidade e preço médio zerados
 VALE3 0 0"""
+
+TABLE_MAX_HEIGHT = 390
+QUESTIONNAIRE_HEIGHT = 440
 
 
 def _positions_table(view: PositionsView) -> None:
@@ -72,6 +77,8 @@ def _positions_table(view: PositionsView) -> None:
         ],
         hide_index=True,
         width="stretch",
+        # Altura fixa: com muitos ativos a tabela rola por dentro e a página não cresce.
+        height=min(TABLE_MAX_HEIGHT, 38 + 35 * len(view.rows)),
     )
 
 
@@ -102,50 +109,86 @@ def _import_form(ctx: PageContext) -> None:
 
 
 def _edit_form(ctx: PageContext, view: PositionsView) -> None:
-    if not view.rows:
+    # Carteira e lista de desejos: os dois podem ter o questionário respondido.
+    classes_by_ticker = {row.ticker: row.asset_class for row in view.rows}
+    classes_by_ticker.update(view.watchlist_classes)
+    if not classes_by_ticker:
         return
     with st.expander("Editar ou remover posição"):
-        tickers = [row.ticker for row in view.rows]
-        ticker = st.selectbox("Ativo", tickers, key="edit_ticker")
-        row = next(r for r in view.rows if r.ticker == ticker)
-        with st.form("edit_position"):
-            avg = st.number_input(
-                "Preço médio (R$)",
-                min_value=0.0,
-                value=float(row.average_price),
-                format="%.8f",
-            )
-            classes = list(AssetClass)
-            asset_class = st.selectbox(
-                "Classe",
-                classes,
-                index=classes.index(row.asset_class),
-                format_func=lambda c: c.label_pt,
-            )
-            save = st.form_submit_button("Salvar")
-        if save:
-            # O preço só é enviado se mudou, para não marcar edição manual à toa.
-            new_avg = Decimal(str(avg))
-            changed_avg = new_avg if abs(new_avg - row.average_price) > Decimal("1e-8") else None
-            try:
-                ctx.container.update_position.execute(
-                    UpdatePositionRequest(
-                        user_id=ctx.user_id,
-                        portfolio_id=ctx.portfolio_id,
-                        ticker=ticker,
-                        average_price=changed_avg,
-                        asset_class=asset_class,
-                    )
-                )
-            except DomainError as error:
-                st.error(str(error))
+        ticker = st.selectbox(
+            "Ativo",
+            list(classes_by_ticker),
+            key="edit_ticker",
+            format_func=lambda t: t + ("  (desejado)" if t in view.watchlist_classes else ""),
+        )
+        if ticker is None:
+            return
+        row = next((r for r in view.rows if r.ticker == ticker), None)
+        tab_position, tab_questions = st.tabs(["Posição", "📝 Questionário de importância"])
+        with tab_position:
+            if row is not None:
+                _position_fields(ctx, row)
             else:
+                st.caption("Ativo da lista de desejos: ainda sem cotas nem preço médio.")
+            if st.button(f"Remover {ticker}", type="secondary"):
+                ctx.container.delete_position.execute(ctx.portfolio_id, ticker)
                 cache.invalidate()
                 st.rerun()
-        if st.button(f"Remover {ticker}", type="secondary"):
-            ctx.container.delete_position.execute(ctx.portfolio_id, ticker)
-            cache.invalidate()
-            st.rerun()
+        with tab_questions:
+            _questionnaire(ctx, ticker, classes_by_ticker[ticker])
+
+
+def _position_fields(ctx: PageContext, row: PositionRow) -> None:
+    with st.form("edit_position"):
+        avg = st.number_input(
+            "Preço médio (R$)",
+            min_value=0.0,
+            value=float(row.average_price),
+            format="%.8f",
+        )
+        classes = list(AssetClass)
+        asset_class = st.selectbox(
+            "Classe",
+            classes,
+            index=classes.index(row.asset_class),
+            format_func=lambda c: c.label_pt,
+        )
+        save = st.form_submit_button("Salvar")
+    if not save:
+        return
+    # O preço só é enviado se mudou, para não marcar edição manual à toa.
+    new_avg = Decimal(str(avg))
+    changed_avg = new_avg if abs(new_avg - row.average_price) > Decimal("1e-8") else None
+    try:
+        ctx.container.update_position.execute(
+            UpdatePositionRequest(
+                user_id=ctx.user_id,
+                portfolio_id=ctx.portfolio_id,
+                ticker=row.ticker,
+                average_price=changed_avg,
+                asset_class=asset_class,
+            )
+        )
+    except DomainError as error:
+        st.error(str(error))
+    else:
+        cache.invalidate()
+        st.rerun()
+
+
+def _questionnaire(ctx: PageContext, ticker: str, asset_class: AssetClass) -> None:
+    """Perguntas do ativo numa caixa com rolagem, mais a postura (pesos de Sim e Não)."""
+    view = ctx.container.get_checklist.execute(ticker, asset_class)
+    if view is None:
+        st.info(
+            f"{asset_class.label_pt} não tem questionário: ele vale para ações e FIIs. "
+            "Nessa classe a decisão de aporte usa só a nota quant."
+        )
+        return
+    with st.popover("⚖️ Peso das respostas"):
+        weights_editor(ctx, "portfolio")
+    with st.container(height=QUESTIONNAIRE_HEIGHT):
+        render_form(ctx, view, "portfolio")
 
 
 def _refresh_button(ctx: PageContext) -> None:

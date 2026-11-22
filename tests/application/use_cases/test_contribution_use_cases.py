@@ -8,14 +8,19 @@ import pytest
 
 from application.dtos.contribution import (
     AssetContributionRequest,
+    AssetDecisionRow,
+    ChecklistWeightsDTO,
     ExecuteContributionRequest,
     SaveChecklistRequest,
+    SaveChecklistWeightsRequest,
 )
 from application.dtos.portfolio import ImportPositionsRequest
 from application.use_cases.contribution import (
     ExecuteContribution,
     GetChecklist,
+    GetChecklistWeights,
     SaveChecklist,
+    SaveChecklistWeights,
     SuggestAssetContribution,
     checklist_kind,
 )
@@ -234,3 +239,37 @@ def test_classe_acima_do_alvo_nao_recebe_e_aporte_vai_ate_o_maximo() -> None:
     # Tudo em renda fixa (CDI é fracionado): o aporte é usado até o último centavo.
     assert [o.ticker for o in result.orders] == ["CDI"]
     assert result.leftover < Decimal("0.01")
+
+
+def test_postura_conservadora_reduz_a_nota_do_checklist() -> None:
+    _, _, _, checklist, use_case, pid = _setup()
+    # AAAA3: 7 Sim automáticos; o usuário marca 2 Não e o resto fica sem resposta.
+    SaveChecklist(checklist).execute(
+        SaveChecklistRequest(
+            user_id="u",
+            ticker="AAAA3",
+            kind=ChecklistKind.STOCK,
+            answers={"research": False, "leadership": False},
+        )
+    )
+
+    def aaaa3() -> AssetDecisionRow:
+        result = use_case.execute(AssetContributionRequest(portfolio_id=pid, amount=Decimal(0)))
+        return next(r for c in result.classes for r in c.rows if r.ticker == "AAAA3")
+
+    default = aaaa3()
+    assert default.checklist is not None
+    assert (default.checklist.yes, default.checklist.no) == (7, 2)
+    assert default.checklist.score == pytest.approx(7 / 11)
+    assert default.checklist_score == pytest.approx(7 / 11 * 100)
+
+    # Um Não anula dois Sim: (7 - 4) / 11.
+    SaveChecklistWeights(checklist).execute(
+        SaveChecklistWeightsRequest(user_id="u", weights=ChecklistWeightsDTO(yes=1, no=2))
+    )
+    assert GetChecklistWeights(checklist).execute() == ChecklistWeightsDTO(yes=1, no=2)
+    conservative = aaaa3()
+    assert conservative.checklist is not None
+    assert conservative.checklist.score == pytest.approx(3 / 11)
+    assert conservative.checklist_score == pytest.approx(3 / 11 * 100)
+    assert (conservative.final_score or 0) < (default.final_score or 0)

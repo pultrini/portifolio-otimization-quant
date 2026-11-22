@@ -11,7 +11,12 @@ posições importadas/editadas ou operação registrada.
 import streamlit as st
 
 from application.dtos.metrics import MetricsReport, MetricsRequest
-from application.dtos.optimization import OptimizationRequest, OptimizationResult
+from application.dtos.optimization import (
+    OptimizationRequest,
+    OptimizationResult,
+    QuantSimulationRequest,
+    QuantSimulationResult,
+)
 from presentation.container import Container
 
 CACHE_TTL_SECONDS = 600
@@ -51,6 +56,16 @@ def optimization_result(
             include_fixed_income=include_fixed_income,
         )
     )
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def quant_simulation(
+    _container: Container, user_id: str, request: QuantSimulationRequest
+) -> QuantSimulationResult:
+    # O request (pydantic) entra na chave do cache: cada combinação de opções é calculada
+    # uma vez até os dados mudarem.
+    del user_id
+    return _container.simulate_quant_portfolio.execute(request)
 
 
 def invalidate() -> None:

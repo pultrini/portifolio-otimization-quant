@@ -125,6 +125,7 @@ def _metrics_table(metrics: RiskReturnMetrics, bench: RiskReturnMetrics, paramet
         ],
         hide_index=True,
         width="stretch",
+        height=400,
         column_config={"O que mede": st.column_config.TextColumn(width="large")},
     )
 

@@ -118,5 +118,10 @@ def build_container() -> tuple[Container, str]:
 
 
 def build_context() -> PageContext:
-    container, portfolio_id = build_container()
+    """Contexto da página; guardado na sessão para que gravações sobrevivam ao rerun."""
+    import streamlit as st
+
+    if "_harness" not in st.session_state:
+        st.session_state["_harness"] = build_container()
+    container, portfolio_id = st.session_state["_harness"]
     return PageContext(container, "user-1", portfolio_id, "Principal")

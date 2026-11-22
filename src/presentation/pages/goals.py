@@ -170,6 +170,7 @@ def _history(ctx: PageContext, board: GoalDashboard) -> None:
             ],
             hide_index=True,
             width="stretch",
+            height=min(320, 38 + 35 * len(board.deposits)),
         )
         col1, col2 = st.columns([2, 1])
         step = col1.selectbox("Desfazer passo", [d.step for d in board.deposits])

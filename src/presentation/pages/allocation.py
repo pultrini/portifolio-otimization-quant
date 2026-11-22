@@ -14,6 +14,7 @@ from presentation.charts.allocation import allocation_delta_bars, allocation_don
 from presentation.components import cache
 from presentation.components.contribution_panel import render_decision
 from presentation.components.formatting import format_brl, format_pct
+from presentation.components.questionnaire import weights_editor
 from presentation.components.session import PageContext
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,10 @@ def _contribution_section(ctx: PageContext) -> None:
         format="%d%%",
         help="O restante do peso vai para o checklist de perguntas.",
     )
-    if st.button("Atualizar fundamentos (dados abertos)", help="Yahoo Finance e CVM."):
+    col_fund, col_weights = st.columns([1, 1])
+    with col_weights.popover("⚖️ Peso das respostas do questionário", width="stretch"):
+        weights_editor(ctx, "allocation")
+    if col_fund.button("Atualizar fundamentos (dados abertos)", help="Yahoo Finance e CVM."):
         with st.spinner("Baixando balanços, cadastro da CVM e informes de FIIs..."):
             failures = ctx.container.refresh_fundamentals.execute(ctx.portfolio_id)
         cache.invalidate()
