@@ -13,7 +13,7 @@ convertido em lotes negociáveis (cotas inteiras na B3).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
@@ -79,6 +79,12 @@ class AssetDecision:
     amount: Decimal
     decision: Decision
     reason: str = ""
+    price: Decimal | None = None
+
+    @property
+    def gap(self) -> Decimal:
+        """Quanto falta para o ativo chegar ao alvo depois das compras já sugeridas."""
+        return self.target_value - self.current_value - self.amount
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,19 +183,20 @@ def decide_class(
         if c.discarded_reason is not None:
             decision, reason = Decision.DISCARDED, c.discarded_reason
         elif not c.price:
-            decision, reason = Decision.NO_PRICE, "Sem cotação; atualize os dados de mercado."
+            decision, reason = Decision.NO_PRICE, "Sem cotação: atualize os dados."
         elif quantities.get(c.ticker, ZERO) > 0:
             decision, reason = Decision.BUY, ""
+        elif budget <= 0:
+            # A classe inteira não recebe neste aporte (já no alvo ou acima).
+            decision, reason = Decision.WAIT, "Classe sem aporte (no alvo ou acima)."
         elif amounts.get(c.ticker, ZERO) > 0:
             # Recebeu parte do aporte, mas ela não paga um lote inteiro.
-            decision = Decision.TOO_EXPENSIVE
-            reason = "A parte do aporte não alcança um lote deste ativo."
+            decision, reason = Decision.TOO_EXPENSIVE, "Valor não paga 1 lote."
         elif deficits.get(c.ticker, ZERO) > 0:
             # Abaixo do ideal, mas outros estão ainda mais abaixo: o aporte não chegou aqui.
-            decision = Decision.WAIT
-            reason = "Outros ativos estão mais abaixo do peso ideal."
+            decision, reason = Decision.WAIT, "Outros mais abaixo do ideal."
         else:
-            decision, reason = Decision.WAIT, "Já está no peso ideal ou acima."
+            decision, reason = Decision.WAIT, "Já no peso ideal ou acima."
         checklist_pct = c.checklist_score * 100 if c.checklist_score is not None else None
         decisions.append(
             AssetDecision(
@@ -204,6 +211,7 @@ def decide_class(
                 amount=spent.get(c.ticker, ZERO),
                 decision=decision,
                 reason=reason,
+                price=c.price,
             )
         )
     decisions.sort(key=lambda d: (d.amount, d.final_score or -1.0), reverse=True)
@@ -265,3 +273,72 @@ def _to_lots(
         spent[best.ticker] = spent.get(best.ticker, ZERO) + step * price
         leftover -= step * price
     return quantities, spent
+
+
+_SPENDABLE = {Decision.BUY, Decision.WAIT, Decision.TOO_EXPENSIVE}
+
+
+def spend_leftover(
+    classes: Sequence[ClassDecision],
+    class_gaps: dict[AssetClass, Decimal],
+    leftover: Decimal,
+) -> tuple[list[ClassDecision], Decimal]:
+    """Usa o troco de todas as classes onde ainda falta percentual.
+
+    Cada classe arredonda o próprio aporte para lotes e sobra um troco. Somados, esses
+    trocos ainda compram lotes, mas só em classes abaixo do valor alvo (`class_gaps`
+    > 0): uma classe acima do alvo nunca recebe, nem pelo troco.
+
+    A cada passo escolhe a classe mais longe do alvo e, nela, o ativo de maior nota
+    entre os que ainda estão abaixo do peso ideal (se nenhum estiver, o de maior nota).
+    Lotes inteiros (B3) entram um por vez, para não concentrar; ativos fracionários
+    (CDI, Tesouro, cripto) recebem de uma vez o que couber no troco e na falta da classe.
+
+    Returns:
+        Classes com as compras extras e o troco final (menor que qualquer lote possível).
+    """
+    gaps = dict(class_gaps)
+    result = list(classes)
+    while leftover > 0:
+        best: tuple[int, int, AssetDecision, Decimal] | None = None
+        for ci, cls in enumerate(result):
+            if gaps.get(cls.asset_class, ZERO) <= 0:
+                continue
+            for di, d in enumerate(cls.decisions):
+                if d.decision not in _SPENDABLE or not d.price:
+                    continue
+                lot_cost = lot_size(d.ticker, cls.asset_class) * d.price
+                if lot_cost > leftover:
+                    continue
+                key = (gaps[cls.asset_class], d.gap > 0, d.final_score or 0.0)
+                if best is None or key > (
+                    gaps[result[best[0]].asset_class],
+                    best[2].gap > 0,
+                    best[2].final_score or 0.0,
+                ):
+                    best = (ci, di, d, lot_cost)
+        if best is None:
+            break
+        ci, di, d, lot_cost = best
+        cls = result[ci]
+        step = lot_size(d.ticker, cls.asset_class)
+        if step < 1:
+            # Fracionário: o que couber no troco e na falta da classe, de uma vez.
+            room = min(leftover, gaps[cls.asset_class])
+            lots = max((room / lot_cost).to_integral_value(rounding=ROUND_DOWN), Decimal(1))
+        else:
+            lots = Decimal(1)
+        cost = lots * lot_cost
+        updated = replace(
+            d,
+            quantity=d.quantity + lots * step,
+            amount=d.amount + cost,
+            decision=Decision.BUY,
+            reason="",
+        )
+        decisions = list(cls.decisions)
+        decisions[di] = updated
+        result[ci] = replace(cls, decisions=decisions, leftover=cls.leftover)
+        gaps[cls.asset_class] = gaps[cls.asset_class] - cost
+        leftover -= cost
+    return result, leftover

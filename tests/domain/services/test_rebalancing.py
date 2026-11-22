@@ -82,3 +82,19 @@ def test_classe_nova_do_perfil_e_centavos_exatos() -> None:
 def test_aporte_negativo() -> None:
     with pytest.raises(DomainError):
         suggest_contribution({}, AllocationProfile({EQ: D("100")}), Money.brl("-1"))
+
+
+def test_classe_acima_do_alvo_hoje_nao_recebe() -> None:
+    # Exemplo do usuário: renda variável com 560 / 1.000 = 56%, alvo 40%. Já está acima
+    # do alvo hoje, então não recebe nada (mesmo que 40% do patrimônio futuro de 2.000,
+    # ou seja 800, seja maior que os 560 atuais).
+    current = {EQ: Money.brl("560"), FI: Money.brl("370"), CR: Money.brl("70")}
+    profile = AllocationProfile({EQ: D("40"), FI: D("50"), CR: D("10")})
+    plan = suggest_contribution(current, profile, Money.brl("1000"))
+    buys = _plan_values(plan, "contribution")
+    assert buys[EQ] == D("0")
+    # Patrimônio 2000: alvos FI 1000 e CR 200 -> déficits 630 e 130 (760 < 1000).
+    # Excedente de 240 dividido entre FI e CR na proporção 50:10 -> 200 e 40.
+    assert buys[FI] == D("830.00")
+    assert buys[CR] == D("170.00")
+    assert sum(buys.values()) == D("1000")
