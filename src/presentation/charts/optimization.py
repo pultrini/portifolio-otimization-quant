@@ -2,7 +2,11 @@
 
 import plotly.graph_objects as go
 
-from application.dtos.optimization import OptimizationResult, PortfolioPointDTO
+from application.dtos.optimization import (
+    OptimizationResult,
+    PortfolioPointDTO,
+    QuantSimulationResult,
+)
 from presentation.charts.theme import (
     DIVERGING,
     NEUTRAL,
@@ -105,4 +109,75 @@ def correlation_heatmap(result: OptimizationResult) -> go.Figure:
     fig = base_layout(fig, height=max(360, 40 * len(tickers) + 120))
     fig.update_layout(hovermode="closest")
     fig.update_yaxes(autorange="reversed", gridcolor="rgba(0,0,0,0)")
+    return fig
+
+
+def simulation_weights(result: QuantSimulationResult) -> go.Figure:
+    """Peso de cada ativo: carteira atual (laranja) x carteira simulada (aqua).
+
+    Barras horizontais lado a lado, do maior peso simulado para o menor, com o valor
+    escrito na ponta de cada barra (leitura direta, sem depender só do hover).
+    """
+    rows = sorted(result.rows, key=lambda r: r.weight)
+    tickers = [r.ticker for r in rows]
+    fig = go.Figure()
+    if result.current is not None:
+        fig.add_trace(
+            go.Bar(
+                y=tickers,
+                x=[r.current_weight for r in rows],
+                name="Atual",
+                orientation="h",
+                marker={"color": CURRENT_COLOR},
+                text=[f"{r.current_weight:.1%}".replace(".", ",") for r in rows],
+                textposition="outside",
+                hovertemplate="%{y}<br>Atual: %{x:.2%}<extra></extra>",
+            )
+        )
+    fig.add_trace(
+        go.Bar(
+            y=tickers,
+            x=[r.weight for r in rows],
+            name="Simulada",
+            orientation="h",
+            marker={"color": OPTIMIZED_COLOR},
+            text=[f"{r.weight:.1%}".replace(".", ",") for r in rows],
+            textposition="outside",
+            hovertemplate="%{y}<br>Simulada: %{x:.2%}<extra></extra>",
+        )
+    )
+    fig = base_layout(fig, height=max(300, 46 * len(rows) + 100))
+    fig.update_layout(barmode="group", bargap=0.3, bargroupgap=0.08, hovermode="closest")
+    top = max([r.weight for r in rows] + [r.current_weight for r in rows] + [0.01])
+    fig.update_xaxes(tickformat=".0%", range=[0, top * 1.18], showgrid=True)
+    fig.update_yaxes(gridcolor="rgba(0,0,0,0)")
+    return fig
+
+
+def simulation_growth(result: QuantSimulationResult) -> go.Figure:
+    """R$ 1 aplicado no início da janela: carteira simulada x atual (pesos constantes)."""
+    fig = go.Figure()
+    if result.current_growth is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=result.dates,
+                y=result.current_growth,
+                name="Atual",
+                mode="lines",
+                line={"color": CURRENT_COLOR, "width": 2},
+                hovertemplate="R$ %{y:.3f}<extra>Atual</extra>",
+            )
+        )
+    fig.add_trace(
+        go.Scatter(
+            x=result.dates,
+            y=result.simulated_growth,
+            name="Simulada",
+            mode="lines",
+            line={"color": OPTIMIZED_COLOR, "width": 2.5},
+            hovertemplate="R$ %{y:.3f}<extra>Simulada</extra>",
+        )
+    )
+    fig = base_layout(fig, height=360)
+    fig.update_yaxes(title="Valor de R$ 1,00", tickprefix="R$ ")
     return fig

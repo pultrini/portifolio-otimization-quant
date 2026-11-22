@@ -6,10 +6,19 @@ from decimal import Decimal
 import numpy as np
 import pytest
 
-from application.dtos.optimization import ContributionRequest, OptimizationRequest
+from application.dtos.optimization import (
+    ContributionRequest,
+    OptimizationRequest,
+    QuantSimulationRequest,
+    QuantSimulationResult,
+)
 from application.dtos.portfolio import ImportPositionsRequest
 from application.use_cases.import_positions import ImportPositions
-from application.use_cases.optimization import OptimizePortfolio, SuggestContribution
+from application.use_cases.optimization import (
+    OptimizePortfolio,
+    SimulateQuantPortfolio,
+    SuggestContribution,
+)
 from domain.exceptions import DomainError
 from domain.value_objects.asset_class import AssetClass
 from tests.fakes.in_memory_portfolio_repository import InMemoryPortfolioRepository
@@ -125,3 +134,84 @@ def test_sugestao_sem_perfil() -> None:
         SuggestContribution(portfolios, InMemoryPositionRepository(), MARKET).execute(
             ContributionRequest(portfolio_id=portfolio.id, amount=Decimal("10"))
         )
+
+
+# --- Simulação da melhor carteira quant -----------------------------------------------
+
+
+def _simulation_setup(
+    targets: dict[str, float] | None,
+) -> tuple[InMemoryPortfolioRepository, InMemoryPositionRepository, FakeMarketDataRepository]:
+    late = _walk(0.002, 0.01)
+    # NOVO3 só começa a negociar na segunda metade da janela: encurtaria a janela.
+    market = FakeMarketDataRepository(
+        dates=DATES,
+        history={
+            **{k: v for k, v in MARKET._history.items()},
+            "DDDD3": _walk(0.0008, 0.012),
+            "NOVO3": [float("nan")] * (N // 2) + late[N // 2 :],
+        },
+    )
+    portfolios = InMemoryPortfolioRepository()
+    portfolio = portfolios.create_portfolio("u", "Principal")
+    positions = InMemoryPositionRepository()
+    ImportPositions(positions, market).execute(
+        ImportPositionsRequest(
+            user_id="u",
+            portfolio_id=portfolio.id,
+            text="AAAA3 10 90\nBBBB3 5 90\nCCCC11 20 100\nCDI R$ 500\nDDDD3 0 0\nNOVO3 0 0",
+        )
+    )
+    if targets is not None:
+        portfolios.save_allocation_targets("u", portfolio.id, targets)
+    return portfolios, positions, market
+
+
+def _simulate(targets: dict[str, float] | None, **options: object) -> QuantSimulationResult:
+    portfolios, positions, market = _simulation_setup(targets)
+    pid = portfolios.list_portfolios()[0].id
+    use_case = SimulateQuantPortfolio(portfolios, positions, market, today=lambda: DATES[-1])
+    return use_case.execute(QuantSimulationRequest(portfolio_id=pid, lookback_years=1, **options))  # type: ignore[arg-type]
+
+
+def test_simulacao_respeita_perfil_e_inclui_lista_de_desejos() -> None:
+    # Perfil com 10% em cripto, classe sem nenhum ativo: o alvo é redistribuído.
+    result = _simulate({"BR_EQUITY": 63.0, "BR_FIXED_INCOME": 27.0, "CRYPTO": 10.0})
+    assert any("Criptoativos" in w and "redistribuído" in w for w in result.warnings)
+    weights = {r.ticker: r.weight for r in result.rows}
+    # 63 / 90 = 70% em renda variável e 27 / 90 = 30% em renda fixa (só CDI).
+    assert sum(w for t, w in weights.items() if t != "CDI") == pytest.approx(0.7, abs=1e-6)
+    assert weights["CDI"] == pytest.approx(0.3, abs=1e-6)
+    # O ativo desejado entra; o listado no meio da janela fica de fora, com motivo.
+    assert "DDDD3" in weights
+    assert "NOVO3" in result.excluded and "encurtaria" in result.excluded["NOVO3"]
+    # Teto padrão de 25% por ativo dentro da renda variável (4 ativos x 25% >= 70%).
+    assert max(w for t, w in weights.items() if t != "CDI") <= 0.25 + 1e-6
+    assert result.current is not None
+    assert result.simulated.sharpe is not None and result.current.sharpe is not None
+    assert len(result.simulated_growth) == len(result.dates)
+    assert sum(c.weight for c in result.classes) == pytest.approx(1.0)
+
+
+def test_simulacao_converte_em_lotes_e_soma_o_aporte() -> None:
+    result = _simulate(None, respect_targets=False, contribution=Decimal("1000"))
+    assert result.excluded["CDI"] == "renda fixa fora da simulação (opção)"
+    held = sum((r.current_value for r in result.rows), Decimal(0))
+    assert result.base_value == held + Decimal("1000")
+    for row in result.rows:
+        # Ações e FIIs em cotas inteiras, sem passar do valor alvo.
+        assert row.target_quantity == row.target_quantity.to_integral_value()
+        assert row.target_quantity * row.price <= row.target_value
+        assert row.delta_quantity == row.target_quantity - row.current_quantity
+    desired = next(r for r in result.rows if r.ticker == "DDDD3")
+    assert desired.in_watchlist and desired.current_quantity == 0
+
+
+def test_simulacao_exige_perfil_quando_pedido() -> None:
+    with pytest.raises(DomainError, match="perfil de alocação"):
+        _simulate(None)
+
+
+def test_simulacao_filtra_ativos_escolhidos() -> None:
+    result = _simulate(None, respect_targets=False, tickers=["AAAA3", "BBBB3"])
+    assert sorted(r.ticker for r in result.rows) == ["AAAA3", "BBBB3"]

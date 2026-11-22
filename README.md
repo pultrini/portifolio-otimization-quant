@@ -63,17 +63,24 @@ Linhas por valor viram quantidade com a última cotação: `quantidade = valor /
 
 ## Páginas
 
-- **Carteira**: posições valorizadas a mercado, importação, edição de preço médio.
+- **Carteira**: posições valorizadas a mercado, importação, edição de preço médio e, em
+  **Editar ou remover posição**, o questionário de importância de cada ativo (inclusive
+  os da lista de desejos) e o peso das respostas.
 - **Operações**: registro de compras e vendas por estratégia; o preço médio é recalculado.
 - **Alocação Alvo**: perfil por classe (soma 100%), atual × alvo e sugestão de aporte.
 - **Métricas por Estratégia**: retorno, risco (VaR/CVaR), Sharpe, Sortino, Calmar, Beta,
   curva de patrimônio e drawdown; win rate, payoff e profit factor por estratégia.
 - **Otimização**: fronteira eficiente (Markowitz), máximo Sharpe, mínima variância,
-  Risk Parity e correlação.
+  Risk Parity e correlação. A aba **Simulando melhor carteira quant** combina carteira e
+  lista de desejos na composição de maior Sharpe (ou menor volatilidade), com teto por
+  ativo e, se quiser, o peso de cada classe igual ao perfil alvo; mostra pesos, valores,
+  diferença em lotes e como a composição teria se saído na janela.
 - **Decisão de aporte** (na Alocação Alvo): por ativo, combinando nota quant (Sharpe,
   Sortino, Calmar) e checklist de perguntas (11 para ações, 6 para FIIs). Respostas
   automáticas por dados abertos (Yahoo Finance e CVM), editáveis; botão **Aportar**
-  registra as compras. Ativos com 0 cotas formam a lista de desejos.
+  registra as compras. Ativos com 0 cotas formam a lista de desejos. O **peso das
+  respostas** permite uma postura conservadora: cada "Não" desconta pontos
+  (`nota = max(0, (Sim × p_sim − Não × p_não) / (perguntas × p_sim))`).
 - **Objetivos**: metas de poupança com foco em constância (desafio 1, 2, 3... ou valor
   fixo), com sequência, constância e calendário de depósitos.
 - **Guia de Métricas**: fórmula, explicação, exemplo numérico e uso na decisão de cada

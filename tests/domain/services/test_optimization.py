@@ -107,3 +107,74 @@ def test_risk_parity_exige_volatilidade() -> None:
 def test_dimensoes_invalidas() -> None:
     with pytest.raises(DomainError):
         AssetUniverse(("A",), np.array([0.1, 0.2]), np.eye(2))
+
+
+# --- Otimização com teto por ativo e peso fixo por grupo (simulação quant) ---------------
+
+TWO = AssetUniverse(("A", "B"), np.array([0.10, 0.15]), np.diag([0.01, 0.04]))
+THREE = AssetUniverse(("A", "B", "C"), np.array([0.10, 0.15, 0.12]), np.diag([0.01, 0.04, 0.0225]))
+
+
+def test_sem_restricoes_extras_reproduz_markowitz() -> None:
+    from domain.services.optimization import optimize_constrained
+
+    sharpe = optimize_constrained(TWO, 0.05)
+    assert sharpe.weights == pytest.approx([2 / 3, 1 / 3], abs=1e-4)
+    variance = optimize_constrained(TWO, 0.05, objective="min_variance")
+    assert variance.weights == pytest.approx([0.8, 0.2], abs=1e-4)
+
+
+def test_teto_por_ativo_limita_concentracao() -> None:
+    from domain.services.optimization import optimize_constrained
+
+    # Mínima variância queria 80% em A; com teto de 60% o resto vai para B.
+    point = optimize_constrained(TWO, 0.05, objective="min_variance", max_weight=0.6)
+    assert point.weights == pytest.approx([0.6, 0.4], abs=1e-4)
+    # Teto inviável (2 x 30% < 100%) é relaxado para 1/n = 50%.
+    relaxed = optimize_constrained(TWO, 0.05, max_weight=0.3)
+    assert relaxed.weights == pytest.approx([0.5, 0.5], abs=1e-4)
+
+
+def test_grupos_fixam_o_peso_de_cada_classe() -> None:
+    from domain.services.optimization import optimize_constrained
+
+    # X = {A, B} com 70%, Y = {C} com 30%. Sem correlação, a mínima variância dentro
+    # de X divide 0,7 na proporção 1/σ² (80/20): A 56%, B 14%.
+    point = optimize_constrained(
+        THREE,
+        0.05,
+        objective="min_variance",
+        groups=["X", "X", "Y"],
+        group_targets={"X": 0.7, "Y": 0.3},
+    )
+    assert point.weights == pytest.approx([0.56, 0.14, 0.30], abs=1e-4)
+    # Teto de 10% é inviável: dentro de X vira 35% (0,7 / 2) e em Y vira 30%.
+    capped = optimize_constrained(
+        THREE,
+        0.05,
+        max_weight=0.1,
+        groups=["X", "X", "Y"],
+        group_targets={"X": 0.7, "Y": 0.3},
+    )
+    assert capped.weights == pytest.approx([0.35, 0.35, 0.30], abs=1e-4)
+
+
+def test_restricoes_invalidas() -> None:
+    from domain.services.optimization import optimize_constrained
+
+    with pytest.raises(DomainError):
+        optimize_constrained(TWO, 0.05, objective="max_return")
+    with pytest.raises(DomainError):
+        optimize_constrained(TWO, 0.05, max_weight=0)
+    with pytest.raises(DomainError):
+        optimize_constrained(TWO, 0.05, groups=["X", "Y"], group_targets={"X": 1.0})
+    with pytest.raises(DomainError):
+        optimize_constrained(TWO, 0.05, groups=["X", "Y"], group_targets={"X": 0.5, "Y": 0.4})
+
+
+def test_curva_de_crescimento_com_pesos_constantes() -> None:
+    from domain.services.optimization import growth_curve
+
+    returns = np.array([[0.10, 0.0], [-0.10, 0.10]])
+    # 1 x (1 + 0,05) = 1,05; 1,05 x (1 + 0) = 1,05.
+    assert growth_curve(returns, np.array([0.5, 0.5])) == pytest.approx([1.0, 1.05, 1.05])

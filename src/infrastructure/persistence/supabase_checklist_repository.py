@@ -1,4 +1,7 @@
-"""Respostas manuais do checklist no Supabase (tabela `checklist_answers`, com RLS)."""
+"""Checklist no Supabase: respostas manuais (`checklist_answers`) e pesos (`checklist_weights`).
+
+As duas tabelas têm RLS: sem filtro por usuário, o select só enxerga as linhas da sessão.
+"""
 
 from collections.abc import Sequence
 from typing import Any, cast
@@ -6,6 +9,7 @@ from typing import Any, cast
 from supabase import Client
 
 from domain.repositories.fundamentals_repository import ChecklistRepository
+from domain.value_objects.checklist import ChecklistWeights
 from domain.value_objects.ticker import Ticker
 
 
@@ -50,3 +54,22 @@ class SupabaseChecklistRepository(ChecklistRepository):
                 .in_("question_key", cleared)
                 .execute()
             )
+
+    def weights(self) -> ChecklistWeights:
+        # Numéricos chegam como texto para não perder precisão no caminho (padrão do projeto).
+        response = (
+            self._client.table("checklist_weights")
+            .select("yes_weight::text, no_weight::text")
+            .limit(1)
+            .execute()
+        )
+        rows = cast(list[dict[str, Any]], response.data)
+        if not rows:
+            return ChecklistWeights()
+        return ChecklistWeights(yes=float(rows[0]["yes_weight"]), no=float(rows[0]["no_weight"]))
+
+    def save_weights(self, user_id: str, weights: ChecklistWeights) -> None:
+        self._client.table("checklist_weights").upsert(
+            {"user_id": user_id, "yes_weight": weights.yes, "no_weight": weights.no},
+            on_conflict="user_id",
+        ).execute()

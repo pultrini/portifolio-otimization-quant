@@ -14,6 +14,7 @@ from domain.exceptions import MissingMarketDataError
 from domain.repositories.market_data_repository import MarketDataRepository
 from domain.repositories.position_repository import PositionRepository
 from domain.repositories.trade_repository import TradeRepository
+from domain.value_objects.checklist import ChecklistWeights
 from domain.value_objects.money import Money
 from domain.value_objects.price_history import PriceHistory
 from domain.value_objects.ticker import Ticker
@@ -99,7 +100,16 @@ class FakeMarketDataRepository(MarketDataRepository):
         missing = [t.symbol for t in tickers if t.symbol not in self._history]
         if missing:
             raise MissingMarketDataError(f"Sem histórico para {', '.join(missing)}.")
-        keep = [i for i, d in enumerate(self._dates) if start is None or d >= start]
+        # NaN = sem cotação no dia (ativo listado depois): como no Parquet, só ficam as
+        # datas em que todos os tickers pedidos têm preço.
+        keep = [
+            i
+            for i, d in enumerate(self._dates)
+            if (start is None or d >= start)
+            and all(not np.isnan(self._history[t.symbol][i]) for t in tickers)
+        ]
+        if not keep:
+            raise MissingMarketDataError("Sem datas em comum.")
         matrix = np.array(
             [[self._history[t.symbol][i] for t in tickers] for i in keep], dtype=np.float64
         ).reshape(len(keep), len(tickers))
@@ -113,6 +123,7 @@ class InMemoryChecklistRepository:
 
     def __init__(self) -> None:
         self.saved: dict[Ticker, dict[str, bool]] = {}
+        self.saved_weights = ChecklistWeights()
 
     def answers(self, tickers: Sequence[Ticker]) -> dict[Ticker, dict[str, bool | None]]:
         return {t: dict(self.saved[t]) for t in tickers if t in self.saved}
@@ -124,6 +135,12 @@ class InMemoryChecklistRepository:
                 current.pop(key, None)
             else:
                 current[key] = value
+
+    def weights(self) -> ChecklistWeights:
+        return self.saved_weights
+
+    def save_weights(self, user_id: str, weights: ChecklistWeights) -> None:
+        self.saved_weights = weights
 
 
 class FakeFundamentalsRepository:

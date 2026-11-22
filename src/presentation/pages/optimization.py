@@ -8,6 +8,7 @@ from application.dtos.optimization import OptimizationResult, PortfolioPointDTO
 from domain.exceptions import DomainError
 from presentation.charts.optimization import correlation_heatmap, frontier_scatter
 from presentation.components import cache
+from presentation.components import quant_simulation_panel as quant_simulation
 from presentation.components.formatting import (
     PLACEHOLDER,
     format_number,
@@ -39,12 +40,10 @@ def _weights_table(result: OptimizationResult) -> None:
         for point in portfolios:
             line[point.label] = fmt(point)
         rows.append(line)
-    st.dataframe(rows, hide_index=True, width="stretch")
+    st.dataframe(rows, hide_index=True, width="stretch", height=min(400, 38 + 35 * len(rows)))
 
 
-def render(ctx: PageContext) -> None:
-    st.header("Otimização")
-    st.caption(f"Carteira: {ctx.portfolio_name}")
+def _frontier_tab(ctx: PageContext) -> None:
     guide.links(ctx.guide_page, ["frontier", "sharpe", "risk_parity", "correlation", "volatility"])
     col1, col2 = st.columns(2)
     lookback = col1.select_slider("Janela de estimação (anos)", options=[1, 2, 3, 5], value=3)
@@ -108,3 +107,13 @@ def render(ctx: PageContext) -> None:
 
     st.markdown("### Correlação entre os ativos", help=help_text("correlation"))
     st.plotly_chart(correlation_heatmap(result), width="stretch")
+
+
+def render(ctx: PageContext) -> None:
+    st.header("Otimização")
+    st.caption(f"Carteira: {ctx.portfolio_name}")
+    frontier, simulation = st.tabs(["Fronteira eficiente", "🧪 Simulando melhor carteira quant"])
+    with frontier:
+        _frontier_tab(ctx)
+    with simulation:
+        quant_simulation.render(ctx)

@@ -11,8 +11,10 @@ from supabase import Client
 from application.use_cases.contribution import (
     ExecuteContribution,
     GetChecklist,
+    GetChecklistWeights,
     RefreshFundamentals,
     SaveChecklist,
+    SaveChecklistWeights,
     SuggestAssetContribution,
 )
 from application.use_cases.goals import (
@@ -27,7 +29,11 @@ from application.use_cases.goals import (
 from application.use_cases.import_positions import ImportPositions
 from application.use_cases.market_data import RefreshMarketData
 from application.use_cases.metrics import CalculateMetrics
-from application.use_cases.optimization import OptimizePortfolio, SuggestContribution
+from application.use_cases.optimization import (
+    OptimizePortfolio,
+    SimulateQuantPortfolio,
+    SuggestContribution,
+)
 from application.use_cases.portfolios import CreatePortfolio, GetAllocationTargets, ListPortfolios
 from application.use_cases.positions import DeletePosition, ListPositions, UpdatePosition
 from application.use_cases.save_allocation_targets import SaveAllocationTargets
@@ -76,11 +82,14 @@ class Container:
     refresh_market_data: RefreshMarketData
     calculate_metrics: CalculateMetrics
     optimize_portfolio: OptimizePortfolio
+    simulate_quant_portfolio: SimulateQuantPortfolio
     suggest_contribution: SuggestContribution
     suggest_asset_contribution: SuggestAssetContribution
     execute_contribution: ExecuteContribution
     get_checklist: GetChecklist
     save_checklist: SaveChecklist
+    get_checklist_weights: GetChecklistWeights
+    save_checklist_weights: SaveChecklistWeights
     refresh_fundamentals: RefreshFundamentals
     preview_goal: PreviewGoal
     create_goal: CreateGoal
@@ -124,6 +133,7 @@ def assemble(
         refresh_market_data=RefreshMarketData(refresher, positions, years),
         calculate_metrics=CalculateMetrics(positions, trades, market_data),
         optimize_portfolio=OptimizePortfolio(positions, market_data),
+        simulate_quant_portfolio=SimulateQuantPortfolio(portfolios, positions, market_data),
         suggest_contribution=suggest_contribution,
         suggest_asset_contribution=SuggestAssetContribution(
             suggest_contribution, positions, market_data, fundamentals, checklist
@@ -131,6 +141,8 @@ def assemble(
         execute_contribution=ExecuteContribution(register_trade),
         get_checklist=GetChecklist(fundamentals, checklist, market_data),
         save_checklist=SaveChecklist(checklist),
+        get_checklist_weights=GetChecklistWeights(checklist),
+        save_checklist_weights=SaveChecklistWeights(checklist),
         refresh_fundamentals=RefreshFundamentals(fundamentals_refresher, positions),
         preview_goal=PreviewGoal(),
         create_goal=CreateGoal(goals),

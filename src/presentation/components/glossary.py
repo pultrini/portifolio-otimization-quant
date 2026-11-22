@@ -18,10 +18,12 @@ from domain.services.optimization import (
     AssetUniverse,
     max_sharpe,
     min_variance,
+    optimize_constrained,
     risk_contributions,
     risk_parity,
 )
 from domain.value_objects.asset_class import AssetClass
+from domain.value_objects.checklist import ChecklistWeights
 from domain.value_objects.ticker import Ticker
 from presentation.components.formatting import format_brl, format_number, format_ratio_as_pct
 
@@ -201,6 +203,37 @@ def _ex_ideal_weight() -> str:
         "Notas finais 80 (A) e 20 (B): pesos ideais 80% e 20%. Classe com R$ 0 e aporte de "
         "R$ 100: alvos R$ 80 e R$ 20. Com A a R$ 10 e B a R$ 7: 8 cotas de A e 2 de B "
         "(R$ 94); sobram R$ 6, menos que uma cota de qualquer um."
+    )
+
+
+def _ex_checklist_weights() -> str:
+    def score(yes_w: float, no_w: float) -> str:
+        return num(ChecklistWeights(yes_w, no_w).score(7, 3, 11) * 100)
+
+    return (
+        "Ação com 11 perguntas: 7 Sim, 3 Não e 1 sem resposta.\n\n"
+        f"- Padrão (Sim 1; Não 0): 7 / 11 → **{score(1, 0)}**\n"
+        f"- Equilibrado (1; 1): (7 − 3) / 11 → **{score(1, 1)}**\n"
+        f"- Conservador (1; 2): (7 − 6) / 11 → **{score(1, 2)}**\n"
+        f"- Muito conservador (1; 3): (7 − 9) / 11 < 0 → **{score(1, 3)}**"
+    )
+
+
+def _ex_simulation() -> str:
+    universe = AssetUniverse(
+        ("A", "B", "C"), np.array([0.25, 0.12, 0.08]), np.diag([0.04, 0.0225, 0.01])
+    )
+    free = optimize_constrained(universe, 0.05)
+    capped = optimize_constrained(universe, 0.05, max_weight=0.4)
+    weights = ", ".join(pct(w) for w in capped.weights)
+    return (
+        "Três ativos com retornos 25%, 12% e 8% e volatilidades 20%, 15% e 10% "
+        "(sem correlação), CDI 5%.\n\n"
+        f"- Sem teto: pesos {', '.join(pct(w) for w in free.weights)}, Sharpe "
+        f"**{num(free.sharpe)}**\n"
+        f"- Teto de 40% por ativo: pesos {weights}, Sharpe **{num(capped.sharpe)}**\n\n"
+        "O teto custa um pouco de Sharpe no passado em troca de uma carteira menos "
+        "dependente das estimativas."
     )
 
 
@@ -399,14 +432,34 @@ DOCS: tuple[MetricDoc, ...] = (
         _ex_correlation,
     ),
     MetricDoc(
+        "quant_simulation",
+        "Otimização",
+        "Simulação da melhor carteira quant",
+        "Combina todos os ativos possíveis (carteira e lista de desejos) na composição de maior "
+        "Sharpe (ou menor volatilidade) no período, com teto por ativo e, se quiser, o peso "
+        "de cada classe igual ao seu perfil alvo.",
+        r"\max_w \frac{w^\top \mu - r_f}{\sqrt{w^\top \Sigma w}}\ \text{s.a.}\ "
+        r"\sum_i w_i = 1,\ 0 \le w_i \le teto,\ \sum_{i \in c} w_i = alvo_c",
+        "μ e Σ são estimados com os retornos diários da janela. O teto por ativo evita "
+        "concentrar tudo em um ou dois ativos (Markowitz puro é muito sensível a erros em "
+        "μ); se o teto não deixar a soma fechar em 100%, ele é relaxado para o mínimo "
+        "viável. Respeitando o perfil, a decisão entre classes é sua e a otimização só "
+        "escolhe a composição dentro delas.",
+        "É o que teria funcionado melhor no período, não uma previsão nem recomendação. "
+        "Use para ver quais ativos desejados melhorariam a relação risco-retorno e onde a "
+        "carteira está concentrada; confirme com o checklist antes de mudar algo.",
+        _ex_simulation,
+    ),
+    MetricDoc(
         "quant_score",
         "Decisão de aporte",
         "Nota quant, checklist e nota final",
         "Nota quant (0-100): posição média do ativo em Sharpe, Sortino e Calmar entre os "
-        "candidatos da classe. Checklist: % de respostas Sim. Nota final: média ponderada.",
-        r"Nota = w_q \cdot Q + (1 - w_q) \cdot \frac{\#Sim}{\#Perguntas} \cdot 100",
+        "candidatos da classe. Checklist: nota das respostas com os seus pesos de Sim e Não. "
+        "Nota final: média ponderada das duas.",
+        r"Nota = w_q \cdot Q + (1 - w_q) \cdot C",
         "A nota quant é relativa: compara os candidatos entre si. Empates recebem a posição "
-        "média. Pergunta sem resposta conta como não ponto.",
+        "média. C é a nota do checklist (veja Peso das respostas do checklist).",
         "Ajuste o peso quant conforme sua confiança: mais peso no checklist favorece "
         "qualidade do negócio; mais peso no quant favorece o histórico de risco-retorno.",
         _ex_quant,
@@ -424,6 +477,22 @@ DOCS: tuple[MetricDoc, ...] = (
         "Ativos acima do peso ideal aguardam: não recebem aporte até os demais alcançarem. "
         "FII com P/VP acima de 1,5 é descartado em qualquer hipótese.",
         _ex_ideal_weight,
+    ),
+    MetricDoc(
+        "checklist_weights",
+        "Decisão de aporte",
+        "Peso das respostas do checklist",
+        "Quanto vale cada Sim e quanto desconta cada Não. Com o Não pesando mais que o Sim, "
+        "um ponto fraco derruba mais a nota: postura conservadora.",
+        r"C = \max\left(0,\ \frac{\#Sim \cdot p_{sim} - \#Não \cdot p_{não}}"
+        r"{\#Perguntas \cdot p_{sim}}\right) \cdot 100",
+        "O denominador é a nota máxima (tudo Sim), então C fica entre 0 e 100. Sem resposta "
+        "não soma nem desconta. Só a razão p_não / p_sim importa: Sim 0,5 e Não 1 dá a "
+        "mesma nota que Sim 1 e Não 2. O padrão (1; 0) é a fração de Sim.",
+        "Use uma postura conservadora quando um defeito (dívida alta, governança ruim) pesa "
+        "mais para você do que uma qualidade. Os pesos valem para todos os ativos e ficam "
+        "salvos na sua conta.",
+        _ex_checklist_weights,
     ),
 )
 
