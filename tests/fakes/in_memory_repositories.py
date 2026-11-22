@@ -10,6 +10,7 @@ from domain.entities.fundamentals import ReitFundamentals, StockFundamentals
 from domain.entities.position import Position
 from domain.entities.savings_goal import GoalDeposit, SavingsGoal
 from domain.entities.trade import Trade
+from domain.entities.treasury import BondTerms, TreasuryQuote
 from domain.exceptions import MissingMarketDataError
 from domain.repositories.market_data_repository import MarketDataRepository
 from domain.repositories.position_repository import PositionRepository
@@ -214,3 +215,39 @@ class InMemorySavingsGoalRepository:
 
     def remove_deposit(self, goal_id: str, step: int) -> None:
         self.deposits.get(goal_id, {}).pop(step, None)
+
+
+class FakeTreasuryRepository:
+    """Cotações do Tesouro em memória: lista de TreasuryQuote por ticker."""
+
+    def __init__(self, quotes: Sequence[TreasuryQuote] = ()) -> None:
+        self._quotes = sorted(quotes, key=lambda q: q.date)
+
+    def latest_quotes(self, tickers: Sequence[Ticker]) -> dict[Ticker, TreasuryQuote]:
+        result: dict[Ticker, TreasuryQuote] = {}
+        for quote in self._quotes:
+            if quote.pu_sell is not None and Ticker(quote.ticker) in tickers:
+                result[Ticker(quote.ticker)] = quote
+        return result
+
+    def quote_on(self, ticker: Ticker, day: date) -> TreasuryQuote | None:
+        found = [
+            q
+            for q in self._quotes
+            if q.ticker == ticker.symbol and q.date <= day and q.pu_buy is not None
+        ]
+        return found[-1] if found else None
+
+
+class InMemoryBondTermsRepository:
+    def __init__(self) -> None:
+        self.saved: dict[tuple[str, Ticker], BondTerms] = {}
+
+    def terms(self, portfolio_id: str) -> dict[Ticker, BondTerms]:
+        return {t: v for (pid, t), v in self.saved.items() if pid == portfolio_id}
+
+    def save_terms(self, user_id: str, portfolio_id: str, ticker: Ticker, terms: BondTerms) -> None:
+        self.saved[(portfolio_id, ticker)] = terms
+
+    def delete_terms(self, portfolio_id: str, ticker: Ticker) -> None:
+        self.saved.pop((portfolio_id, ticker), None)

@@ -4,8 +4,9 @@ import streamlit as st
 
 from application.dtos.metrics import RiskReturnMetrics, ScopeReport
 from domain.exceptions import DomainError
+from domain.value_objects.asset_class import AssetClass
 from presentation.charts.performance import equity_and_underwater
-from presentation.components import cache
+from presentation.components import cache, mark_to_market_panel
 from presentation.components.formatting import (
     PLACEHOLDER,
     format_brl,
@@ -178,8 +179,12 @@ def _trade_stats(scope: ScopeReport) -> None:
         st.caption(note)
 
 
-def _scope_section(scope: ScopeReport, parametric: bool) -> None:
+def _scope_section(ctx: PageContext, scope: ScopeReport, parametric: bool) -> None:
     st.subheader(scope.label)
+    # Na aba de renda fixa brasileira entra a marcação a mercado dos títulos do Tesouro,
+    # mesmo quando as métricas da classe não puderam ser calculadas.
+    if scope.key == AssetClass.BR_FIXED_INCOME.value:
+        mark_to_market_panel.render(ctx)
     if scope.error:
         st.warning(scope.error)
         if scope.trade_stats is not None:
@@ -229,8 +234,8 @@ def render(ctx: PageContext) -> None:
             continue
         st.markdown(f"### {title}")
         if len(scopes) == 1:
-            _scope_section(scopes[0], parametric)
+            _scope_section(ctx, scopes[0], parametric)
             continue
         for tab, scope in zip(st.tabs([s.label for s in scopes]), scopes, strict=True):
             with tab:
-                _scope_section(scope, parametric)
+                _scope_section(ctx, scope, parametric)

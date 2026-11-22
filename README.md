@@ -77,7 +77,11 @@ variável aparecem com o botão **Mover para a classe imobiliária** na página 
 - **Operações**: registro de compras e vendas por estratégia; o preço médio é recalculado.
 - **Alocação Alvo**: perfil por classe (soma 100%), atual × alvo e sugestão de aporte.
 - **Métricas por Estratégia**: retorno, risco (VaR/CVaR), Sharpe, Sortino, Calmar, Beta,
-  curva de patrimônio e drawdown; win rate, payoff e profit factor por estratégia.
+  curva de patrimônio e drawdown; win rate, payoff e profit factor por estratégia. Na aba
+  **Renda Fixa Brasil**, a **marcação a mercado** compara vender cada título do Tesouro
+  (Prefixado, IPCA+ e IPCA+ com juros) hoje com levá-lo até o vencimento: valor de resgate
+  × valor na curva da taxa contratada (digitada ou estimada pelo preço médio e pela data da
+  compra) e a taxa de reinvestimento que empata as duas escolhas.
 - **Otimização**: fronteira eficiente (Markowitz), máximo Sharpe, mínima variância,
   Risk Parity e correlação. A aba **Simulando melhor carteira quant** combina carteira e
   lista de desejos na composição de maior Sharpe (ou menor volatilidade), com teto por
