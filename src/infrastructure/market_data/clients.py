@@ -57,7 +57,9 @@ def _with_retries[T](action: str, call: Callable[[], T]) -> T:
         try:
             result: T = call()
             return result
-        except (httpx.HTTPError, SourceError) as error:
+        # ValueError cobre JSON inválido (JSONDecodeError herda dele): o SGS às vezes
+        # responde 200 com corpo vazio ou HTML quando está instável. É transitório.
+        except (httpx.HTTPError, SourceError, ValueError) as error:
             last_error = error
             logger.warning("%s falhou (tentativa %d/%d): %s", action, attempt, RETRIES, error)
             if attempt < RETRIES:
@@ -143,7 +145,12 @@ class BcbSgsClient:
                     if response.status_code == 404:
                         return []
                     response.raise_for_status()
-                    payload: list[dict[str, str]] = response.json()
+                    try:
+                        payload: list[dict[str, str]] = response.json()
+                    except ValueError as error:
+                        raise SourceError(
+                            f"resposta do Banco Central não é JSON ({response.text[:60]!r})"
+                        ) from error
                     return payload
 
                 rows = _with_retries(f"SGS {code} {params['dataInicial']}", call)

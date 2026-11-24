@@ -88,6 +88,12 @@ def _import_form(ctx: PageContext) -> None:
             "Uma posição por linha. Linhas com `R$` são lidas por valor: a quantidade é "
             "calculada com a última cotação (útil para renda fixa e cripto)."
         )
+        st.caption(
+            "Ações e ETFs americanos: use o ticker da bolsa americana (AAPL, BRK.B, VOO). "
+            "Valores e preço médio sempre em **R$**; o app converte as cotações pela PTAX. "
+            "Se só souber o preço em dólar, importe por valor: `AAPL R$ 1500 1200` "
+            "(valor atual e valor investido em reais)."
+        )
         with st.form("import_positions"):
             text = st.text_area("Posições", height=220, placeholder=IMPORT_EXAMPLE)
             replace = st.checkbox("Remover posições que não estão na lista")

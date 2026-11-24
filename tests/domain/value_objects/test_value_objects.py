@@ -91,3 +91,12 @@ def test_pesos_do_checklist() -> None:
     for yes, no in ((0, 1), (4, 0), (1, -1), (1, 6)):
         with pytest.raises(DomainError):
             ChecklistWeights(yes, no)
+
+
+def test_normalizacao_de_tickers_internacionais_e_da_b3() -> None:
+    from domain.value_objects.ticker import Ticker
+
+    assert Ticker.parse(" brk.b ").symbol == "BRK-B"
+    assert Ticker.parse("PETR4.SA").symbol == "PETR4"
+    assert Ticker.parse("^BVSP").symbol == "^BVSP"
+    assert Ticker.parse("aapl").symbol == "AAPL"
