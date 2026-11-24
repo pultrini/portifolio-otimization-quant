@@ -165,12 +165,21 @@ class MedallionPipeline(MarketDataRefresher):
         schema: pl.Schema,
         ingested_at: datetime,
     ) -> int:
-        """Baixa uma série e grava na Bronze; falha de rede vira registro em `failures`."""
+        """Baixa uma série e grava na Bronze; qualquer falha da fonte vira `failures`.
+
+        A captura é ampla de propósito: bibliotecas de terceiros (yfinance, httpx) lançam
+        exceções próprias (limite de requisições, JSON inválido...). Uma fonte instável
+        não pode derrubar o pipeline: a Silver usa o último snapshot bom da Bronze.
+        """
         try:
             frame = fetch()
         except SourceError as error:
             logger.warning("Falha ao baixar %s: %s", spec.ticker, error)
             failures[spec.ticker] = str(error)
+            return 0
+        except Exception as error:
+            logger.exception("Erro inesperado ao baixar %s", spec.ticker)
+            failures[spec.ticker] = f"{type(error).__name__}: {error}"
             return 0
         key = _PARTITION_KEYS[spec.source]
         return write_bronze(

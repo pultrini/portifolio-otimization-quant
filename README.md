@@ -62,6 +62,8 @@ Tickers suportados:
 | Tesouro Direto | `NTNB-2060`, `IPCA-2035`, `PRE-2029`, `SELIC-2029` | CSV oficial do Tesouro |
 
 Linhas por valor viram quantidade com a última cotação: `quantidade = valor / preço`.
+Valores e preço médio são sempre em reais, inclusive para ações americanas (as cotações em
+dólar são convertidas pela PTAX). `BRK.B` é aceito e vira `BRK-B`, o código do Yahoo.
 
 FIIs e REITs têm classes próprias (**Fundos Imobiliários (FII)**, benchmark IFIX pelo ETF
 XFIX11, e **REITs (Internacional)**, benchmark VNQ). Um ticker com final 11 é FII quando

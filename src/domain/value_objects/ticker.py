@@ -28,8 +28,17 @@ class Ticker:
 
     @classmethod
     def parse(cls, raw: str) -> Ticker:
-        """Normaliza a entrada do usuário (espaços e minúsculas) antes de validar."""
-        return cls(raw.strip().upper())
+        """Normaliza a entrada do usuário antes de validar.
+
+        - espaços e minúsculas: " aapl " -> "AAPL";
+        - sufixo do Yahoo para a B3: "PETR4.SA" -> "PETR4";
+        - classe de ação americana com ponto: "BRK.B" -> "BRK-B" (o Yahoo usa hífen, e o
+          ticker canônico precisa ser o mesmo da fonte para a cotação voltar a ele).
+        """
+        symbol = raw.strip().upper().removesuffix(".SA")
+        if not symbol.startswith("^"):
+            symbol = symbol.replace(".", "-")
+        return cls(symbol)
 
     def __str__(self) -> str:
         return self.symbol
