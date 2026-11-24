@@ -1,6 +1,6 @@
 [project]
 name = "portfolio-optimization"
-version = "0.6.0"
+version = "0.6.1"
 description = "Otimização de portfólio, engenharia de dados medalhão e métricas por estratégia."
 # numpy 2.5 exige Python 3.12+, por isso o piso é 3.12 (o CLAUDE.md cita 3.11+).
 requires-python = ">=3.12"

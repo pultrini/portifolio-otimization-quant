@@ -148,3 +148,37 @@ def test_horizonte_de_ptax_acompanha_os_anos(tmp_path: Path, years: int) -> None
     assert starts["12"] == date(2000, 1, 1)
     assert starts["1"] == TODAY - timedelta(days=365 * years)
     assert starts["11"] == TODAY - timedelta(days=365 * years)
+
+
+class BrokenJsonBcb(FakeBcb):
+    """SGS instável: a série do CDI responde com algo que não é JSON."""
+
+    def fetch(self, code: str, start: date, end: date) -> pl.DataFrame:
+        if code == "12":
+            import json
+
+            json.loads("<html>indisponível</html>")
+        return super().fetch(code, start, end)
+
+
+class RateLimitedYahoo(FakeYahoo):
+    def fetch(self, symbol: str, start: date) -> pl.DataFrame:
+        if symbol == "AAPL":
+            raise RuntimeError("Too Many Requests. Rate limited.")
+        return super().fetch(symbol, start)
+
+
+def test_erro_inesperado_de_uma_fonte_vira_falha_e_nao_derruba(tmp_path: Path) -> None:
+    pipeline = MedallionPipeline(
+        tmp_path,
+        RateLimitedYahoo(),
+        BrokenJsonBcb(),
+        FakeTesouro(),
+        today=lambda: TODAY,
+        now=lambda: datetime(2026, 1, 8, 21, 0, tzinfo=UTC),
+    )
+    report = pipeline.refresh([Ticker("AAPL"), Ticker("MSFT"), Ticker("ABCD3")], years=1)
+    assert "JSONDecodeError" in report.failed_tickers["CDI"]
+    assert "RuntimeError" in report.failed_tickers["AAPL"]
+    gold = pl.read_parquet(tmp_path / "gold" / "prices.parquet")
+    assert {"MSFT", "ABCD3"} <= set(gold["ticker"].to_list())
